@@ -1,0 +1,267 @@
+{
+  "source": "Dokumentasi resmi tiap provider (lihat field sources per aturan di catatan model)",
+  "checked": "2026-10-15",
+  "rules": [
+    {
+      "endpoint": "google",
+      "model": "^(models/)?gemini",
+      "patch": {
+        "tools": true,
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "reasoning": {
+          "style": "openai-effort",
+          "canDisable": false,
+          "defaultOn": true,
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "defaultEffort": "medium",
+          "lockedWhileActive": []
+        },
+        "notes": [
+          "Reasoning tidak bisa dimatikan pada Gemini 2.5 Pro dan Gemini 3. reasoning_effort dan thinking_config tidak boleh dipakai bersamaan (sumber: ai.google.dev/gemini-api/docs/openai)."
+        ]
+      }
+    },
+    {
+      "endpoint": "xai",
+      "model": "^grok",
+      "patch": {
+        "tools": true,
+        "stop": false,
+        "reasoning": {
+          "style": "openai-effort",
+          "canDisable": false,
+          "defaultOn": true,
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "defaultEffort": "high",
+          "lockedWhileActive": [
+            "presence_penalty",
+            "frequency_penalty"
+          ],
+          "lockReason": "xAI menolak parameter ini pada model reasoning."
+        },
+        "notes": [
+          "presencePenalty, frequencyPenalty, dan stop ditolak pada model reasoning xAI. Dokumentasi reasoning xAI menjelaskan Responses API; dukungan reasoning_effort di Chat Completions belum terverifikasi (sumber: docs.x.ai/docs/guides/reasoning)."
+        ]
+      }
+    },
+    {
+      "endpoint": "qwen",
+      "model": "^(qwen|qwq)",
+      "patch": {
+        "tools": true,
+        "reasoning": {
+          "style": "qwen",
+          "canDisable": true,
+          "defaultOn": false,
+          "efforts": [],
+          "budget": {
+            "min": 0,
+            "max": 81920,
+            "step": 64
+          },
+          "lockedWhileActive": []
+        },
+        "notes": [
+          "enable_thinking hanya berlaku untuk model mixed-thinking. Rentang thinking_budget bergantung pada model dan belum terverifikasi; nilai di luar rentang akan ditolak provider."
+        ]
+      }
+    },
+    {
+      "endpoint": "zai",
+      "model": "^glm",
+      "patch": {
+        "tools": true,
+        "reasoning": {
+          "style": "zai",
+          "canDisable": true,
+          "defaultOn": true,
+          "efforts": [],
+          "lockedWhileActive": []
+        },
+        "notes": [
+          "Thinking aktif secara default (sumber: docs.z.ai)."
+        ]
+      }
+    },
+    {
+      "endpoint": "minimax",
+      "model": "^MiniMax",
+      "patch": {
+        "tools": true,
+        "sampling": {
+          "temperature": {
+            "min": 0,
+            "max": 2,
+            "step": 0.05,
+            "default": 1
+          }
+        },
+        "bodyDefaults": {
+          "reasoning_split": true
+        },
+        "reasoning": {
+          "style": "none",
+          "canDisable": false,
+          "defaultOn": true,
+          "efforts": [],
+          "lockedWhileActive": []
+        },
+        "reasoningReplay": "always",
+        "notes": [
+          "reasoning_split=true selalu dikirim agar reasoning terpisah di reasoning_content. Reasoning wajib dipertahankan utuh di riwayat saat memakai tools (diterapkan di M2). Nilai temperature di luar 0 sampai 2 ditolak; disarankan 1.0."
+        ]
+      }
+    },
+    {
+      "endpoint": "mimo",
+      "model": "^mimo",
+      "patch": {
+        "tools": true,
+        "reasoning": {
+          "style": "none",
+          "canDisable": false,
+          "defaultOn": true,
+          "efforts": [],
+          "lockedWhileActive": []
+        },
+        "reasoningReplay": "with-tools",
+        "notes": [
+          "Field untuk mengatur thinking belum terdokumentasi di halaman resmi yang diperiksa, jadi kontrolnya tidak ditampilkan. Gunakan Extra body jika kamu tahu nama field-nya.",
+          "reasoning_content wajib dikirim ulang pada percakapan dengan tools (diterapkan di M2)."
+        ]
+      }
+    },
+    {
+      "endpoint": "openrouter",
+      "model": ".*",
+      "patch": {
+        "reasoningReplay": "with-tools",
+        "extras": [
+          {
+            "key": "provider_sort",
+            "label": "Urutan provider",
+            "description": "Cara OpenRouter memilih provider untuk model ini.",
+            "path": "provider.sort",
+            "type": "enum",
+            "options": [
+              {
+                "value": "price",
+                "label": "Termurah"
+              },
+              {
+                "value": "throughput",
+                "label": "Throughput tertinggi"
+              },
+              {
+                "value": "latency",
+                "label": "Latensi terendah"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "endpoint": "venice",
+      "model": ".*",
+      "patch": {
+        "sampling": {
+          "top_k": {
+            "min": 0,
+            "max": 200,
+            "step": 1
+          },
+          "min_p": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+          },
+          "repetition_penalty": {
+            "min": 0,
+            "max": 2,
+            "step": 0.05
+          }
+        },
+        "reasoningReplay": "with-tools",
+        "extras": [
+          {
+            "key": "venice_system_prompt",
+            "label": "System prompt Venice",
+            "description": "Sertakan system prompt bawaan Venice di samping milikmu.",
+            "path": "venice_parameters.include_venice_system_prompt",
+            "type": "boolean",
+            "default": true
+          },
+          {
+            "key": "venice_web_search",
+            "label": "Web search",
+            "description": "Pencarian web oleh Venice. Bisa dikenai biaya tambahan.",
+            "path": "venice_parameters.enable_web_search",
+            "type": "enum",
+            "options": [
+              {
+                "value": "off",
+                "label": "Mati"
+              },
+              {
+                "value": "auto",
+                "label": "Otomatis"
+              },
+              {
+                "value": "on",
+                "label": "Selalu"
+              }
+            ],
+            "default": "off"
+          },
+          {
+            "key": "venice_strip_thinking",
+            "label": "Buang blok <think>",
+            "path": "venice_parameters.strip_thinking_response",
+            "type": "boolean",
+            "default": false
+          }
+        ]
+      }
+    },
+    {
+      "endpoint": "local",
+      "model": ".*",
+      "patch": {
+        "sampling": {
+          "top_k": {
+            "min": 0,
+            "max": 200,
+            "step": 1
+          },
+          "min_p": {
+            "min": 0,
+            "max": 1,
+            "step": 0.01
+          },
+          "repetition_penalty": {
+            "min": 0,
+            "max": 2,
+            "step": 0.05
+          }
+        },
+        "notes": [
+          "Blok <think>...</think> di dalam jawaban dipisahkan sebagai reasoning secara otomatis."
+        ]
+      }
+    }
+  ]
+}

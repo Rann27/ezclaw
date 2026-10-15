@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+*.tsbuildinfo
+.sandbox/
+
+.sandbox*/
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+.claude/settings.local.json

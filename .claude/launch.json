@@ -1,0 +1,53 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ezclaw",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "start"
+      ],
+      "port": 8787
+    },
+    {
+      "name": "ezclaw-sandbox",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/sandbox.mjs"
+      ],
+      "port": 8788
+    },
+    {
+      "name": "ezclaw-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "mock-provider",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@ezclaw/server",
+        "mock"
+      ],
+      "port": 9911
+    },
+    {
+      "name": "design-preview",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4321",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "design"
+      ],
+      "port": 4321
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "source": "https://api-docs.deepseek.com/guides/thinking_mode",
+  "checked": "2026-10-15",
+  "rules": [
+    {
+      "endpoint": "deepseek",
+      "model": ".*",
+      "patch": {
+        "tools": true,
+        "maxTokensField": "max_tokens",
+        "sampling": {
+          "top_p": {
+            "min": 0.95,
+            "max": 1,
+            "step": 0.01
+          }
+        },
+        "reasoning": {
+          "style": "deepseek",
+          "canDisable": true,
+          "defaultOn": true,
+          "efforts": [
+            "low",
+            "high",
+            "max"
+          ],
+          "defaultEffort": "high",
+          "lockedWhileActive": [
+            "temperature",
+            "presence_penalty",
+            "frequency_penalty"
+          ],
+          "lockReason": "DeepSeek mengabaikan parameter ini saat thinking aktif (tanpa error)."
+        },
+        "reasoningReplay": "with-tools",
+        "notes": [
+          "Thinking aktif secara default dengan effort high. top_p hanya berlaku saat thinking aktif, rentang efektif 0.95 sampai 1.0.",
+          "Saat memakai tools, reasoning_content semua giliran sebelumnya wajib dikirim ulang atau API menjawab 400 (diterapkan di M2)."
+        ]
+      }
+    }
+  ]
+}

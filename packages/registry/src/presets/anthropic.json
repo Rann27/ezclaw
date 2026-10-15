@@ -1,0 +1,62 @@
+{
+  "source": "https://platform.claude.com/docs/en/build-with-claude/thinking",
+  "checked": "2026-10-15",
+  "rules": [
+    {
+      "endpoint": "anthropic",
+      "model": "^claude-(3|haiku-4-5|sonnet-4-5|opus-4-5|opus-4-1|opus-4-0|sonnet-4-0|opus-4|sonnet-4)(-|$)",
+      "priority": "fallback",
+      "patch": {
+        "reasoning": {
+          "style": "anthropic-budget",
+          "canDisable": true,
+          "defaultOn": false,
+          "efforts": [],
+          "budget": { "min": 1024, "max": 64000, "step": 256, "default": 8000 },
+          "lockedWhileActive": []
+        }
+      }
+    },
+    {
+      "endpoint": "anthropic",
+      "model": "^claude-(opus|sonnet)-4-[6-9]",
+      "priority": "fallback",
+      "patch": {
+        "reasoning": {
+          "style": "anthropic-adaptive",
+          "canDisable": true,
+          "defaultOn": false,
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "high",
+          "lockedWhileActive": []
+        }
+      }
+    },
+    {
+      "endpoint": "anthropic",
+      "model": "^claude-[a-z]+-5",
+      "priority": "fallback",
+      "patch": {
+        "reasoning": {
+          "style": "anthropic-adaptive",
+          "canDisable": true,
+          "defaultOn": true,
+          "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "high",
+          "lockedWhileActive": []
+        }
+      }
+    },
+    {
+      "endpoint": "anthropic",
+      "model": "^claude-[a-z]+-5",
+      "patch": {
+        "reasoning": { "defaultOn": true },
+        "notes": [
+          "Model 5.x berpikir secara default, tapi teks thinking disembunyikan kecuali display 'summarized' dikirim. EZClaw mengirimnya otomatis.",
+          "Thinking tidak bisa dimatikan pada effort xhigh dan max (API menolak dengan 400)."
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,342 @@
+@import "tailwindcss";
+@import "../../../design/tokens.css";
+@import "@fontsource/atkinson-hyperlegible-next/400.css";
+@import "@fontsource/atkinson-hyperlegible-next/600.css";
+@import "@fontsource/atkinson-hyperlegible-next/700.css";
+@import "@fontsource/atkinson-hyperlegible-mono/400.css";
+@import "@fontsource/atkinson-hyperlegible-mono/600.css";
+
+/*
+  Tailwind only knows the EZClaw tokens: default palettes, fonts, radii and shadows are
+  reset so a stray `bg-blue-500` cannot sneak in. Names differ from tokens.css on purpose
+  (e.g. --color-fg, --shadow-popover) to avoid self-referencing custom properties.
+*/
+@theme inline {
+  --color-*: initial;
+  --color-canvas: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--text);
+  --color-fg-2: var(--text-2);
+  --color-fg-3: var(--text-3);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-text: var(--brand-text);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-soft-text: var(--brand-soft-text);
+  --color-ember: var(--ember);
+  --color-ember-ink: var(--ember-ink);
+  --color-ember-text: var(--ember-text);
+  --color-ember-soft: var(--ember-soft);
+  --color-danger: var(--danger);
+  --color-danger-ink: var(--danger-ink);
+  --color-danger-text: var(--danger-text);
+  --color-danger-soft: var(--danger-soft);
+  --color-scrim: var(--scrim);
+
+  --font-*: initial;
+  --font-ui: var(--font-sans);
+  --font-code: var(--font-mono);
+
+  --text-*: initial;
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.45;
+  --text-dense: 0.8125rem;
+  --text-dense--line-height: 1.45;
+  --text-ui: 0.875rem;
+  --text-ui--line-height: 1.45;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.62;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.25;
+  --text-page: 1.25rem;
+  --text-page--line-height: 1.25;
+  --text-hero: 1.5rem;
+  --text-hero--line-height: 1.25;
+
+  --radius-*: initial;
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-full: var(--r-full);
+
+  --shadow-*: initial;
+  --shadow-popover: var(--shadow-pop);
+  --shadow-modal: var(--shadow-dialog);
+
+  --ease-ez: var(--ease);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--text-md);
+    line-height: var(--leading-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  code,
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+  }
+}
+
+@layer components {
+  /* Thread motif node: 7px square, see DESIGN.md section 7 */
+  .node {
+    display: inline-block;
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+  }
+  .node-done { background: var(--brand); }
+  .node-wait { background: var(--ember); }
+  .node-fail { background: var(--danger); }
+  .node-skip { border: 1px solid var(--line-strong); }
+  .node-run {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--brand-strong);
+  }
+  .node-run::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--brand);
+    transform: translateY(100%);
+    animation: node-fill 1.4s var(--ease) infinite;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-1-5);
+    min-height: var(--control-h);
+    padding: 0 var(--s-3);
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    font-size: var(--text-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+  }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary { background: var(--brand); color: var(--brand-ink); }
+  .btn-primary:hover:not(:disabled) { background: var(--brand-hover); }
+  .btn-secondary { background: var(--raised); color: var(--text); border-color: var(--line-strong); }
+  .btn-secondary:hover:not(:disabled) { background: var(--sunken); }
+  .btn-ghost { background: transparent; color: var(--text-2); }
+  .btn-ghost:hover:not(:disabled) { background: var(--sunken); color: var(--text); }
+  .btn-icon { width: var(--control-h); padding: 0; }
+
+  @media (pointer: coarse) {
+    .btn { min-height: var(--tap); }
+    .btn-icon { width: var(--tap); }
+  }
+}
+
+@keyframes node-fill {
+  0% { transform: translateY(100%); }
+  60%,
+  100% { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-run::after {
+    animation: none;
+    transform: translateY(50%);
+  }
+}
+
+/* Rendered markdown in answers */
+@layer components {
+  .prose-ez {
+    font-size: var(--text-read);
+    line-height: var(--leading-read);
+    overflow-wrap: anywhere;
+  }
+  .prose-ez > :first-child { margin-top: 0; }
+  .prose-ez > :last-child { margin-bottom: 0; }
+  .prose-ez p { margin: 0.75em 0; }
+  .prose-ez h1, .prose-ez h2, .prose-ez h3, .prose-ez h4 { margin: 1.4em 0 0.5em; line-height: var(--leading-tight); font-weight: 600; }
+  .prose-ez h1 { font-size: 1.35em; }
+  .prose-ez h2 { font-size: 1.2em; }
+  .prose-ez h3 { font-size: 1.05em; }
+  .prose-ez ul, .prose-ez ol { margin: 0.75em 0; padding-left: 1.5em; }
+  .prose-ez ul { list-style: disc; }
+  .prose-ez ol { list-style: decimal; }
+  .prose-ez li { margin: 0.25em 0; }
+  .prose-ez a { color: var(--brand-text); text-decoration: underline; text-underline-offset: 2px; }
+  .prose-ez blockquote { margin: 0.9em 0; padding: 0.1em 0 0.1em 1em; border-left: 2px solid var(--line-strong); color: var(--text-2); }
+  .prose-ez hr { margin: 1.5em 0; border: 0; border-top: 1px solid var(--line); }
+  .prose-ez :not(pre) > code { background: var(--sunken); padding: 0.1em 0.35em; border-radius: var(--r-xs); font-size: 0.9em; }
+  .prose-ez table { border-collapse: collapse; font-size: var(--text-dense); }
+  .prose-ez th, .prose-ez td { border: 1px solid var(--line); padding: 0.4em 0.75em; text-align: left; vertical-align: top; }
+  .prose-ez th { background: var(--sunken); font-weight: 600; }
+  .prose-ez .katex-display { overflow-x: auto; overflow-y: hidden; }
+
+  .code-scroll { overflow-x: auto; }
+  .code-scroll pre.shiki { margin: 0; padding: 0.75rem; background: transparent !important; font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.55; }
+  .code-scroll code { font-family: var(--font-mono); }
+  .shiki span { color: var(--shiki-light); }
+}
+:root[data-theme="dark"] .shiki span { color: var(--shiki-dark); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shiki span { color: var(--shiki-dark); }
+}
+
+/* Form controls and small widgets shared across screens */
+@layer components {
+  .input,
+  .select,
+  .textarea {
+    width: 100%;
+    min-height: var(--control-h);
+    padding: 0 var(--s-3);
+    background: var(--raised);
+    color: var(--text);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    font: inherit;
+  }
+  .textarea { padding: var(--s-2) var(--s-3); line-height: 1.5; resize: vertical; }
+  .input::placeholder,
+  .textarea::placeholder { color: var(--text-3); }
+  .input:disabled,
+  .select:disabled,
+  .textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .btn-danger { background: var(--danger); color: var(--danger-ink); }
+  .btn-approve { background: var(--ember); color: var(--ember-ink); }
+
+  .ep-tag {
+    flex: none;
+    background: var(--sunken);
+    color: var(--text-2);
+    border-radius: var(--r-xs);
+    padding: 1px var(--s-1-5);
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+  .model-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-1-5);
+    max-width: 100%;
+    min-height: 32px;
+    padding: 0 var(--s-2) 0 var(--s-1);
+    background: var(--raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+  .model-chip:hover:not(:disabled) { background: var(--sunken); }
+  .model-chip:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .chip-toggle {
+    min-height: 30px;
+    padding: var(--s-1) var(--s-2);
+    background: var(--raised);
+    color: var(--text-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-xs);
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+  .chip-toggle[aria-pressed="true"] {
+    background: var(--brand-soft);
+    color: var(--brand-soft-text);
+    border-color: var(--brand-strong);
+    font-weight: 600;
+  }
+
+  .seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    width: fit-content;
+    padding: 2px;
+    background: var(--sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+  }
+  .seg > button {
+    min-height: 30px;
+    padding: var(--s-1) var(--s-3);
+    background: transparent;
+    color: var(--text-2);
+    border: 0;
+    border-radius: var(--r-xs);
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+  .seg > button[aria-checked="true"] { background: var(--brand-soft); color: var(--brand-soft-text); font-weight: 600; }
+  .seg > button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-1) 0;
+    background: none;
+    border: 0;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .switch-track {
+    position: relative;
+    flex: none;
+    width: 34px;
+    height: 20px;
+    background: var(--sunken);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-full);
+    transition: background-color var(--t-fast) var(--ease);
+  }
+  .switch-track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: var(--text-2);
+    border-radius: 50%;
+    transition: transform var(--t-fast) var(--ease);
+  }
+  .switch[aria-checked="true"] .switch-track { background: var(--brand-strong); border-color: var(--brand-strong); }
+  .switch[aria-checked="true"] .switch-track::after { transform: translateX(14px); background: var(--raised); }
+  .switch:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  input[type="range"] { accent-color: var(--brand-strong); }
+}
+
+/* Collapsible rows: a caret that turns when open, and no browser marker */
+@layer components {
+  details > summary { list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details[open] > summary > .chev { transform: rotate(90deg); }
+  .chev { transition: transform var(--t-fast) var(--ease); flex: none; }
+}

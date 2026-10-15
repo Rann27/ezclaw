@@ -1,0 +1,42 @@
+{
+  "source": "https://developers.openai.com/api/docs/guides/reasoning",
+  "checked": "2026-10-15",
+  "rules": [
+    {
+      "endpoint": "openai",
+      "model": "^(gpt-6|gpt-5|o[1-9])",
+      "patch": {
+        "tools": true,
+        "maxTokensField": "max_completion_tokens",
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "reasoning": {
+          "style": "openai-effort",
+          "canDisable": false,
+          "defaultOn": true,
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "defaultEffort": "medium",
+          "lockedWhileActive": [
+            "temperature",
+            "top_p",
+            "frequency_penalty",
+            "presence_penalty"
+          ],
+          "lockReason": "Model reasoning OpenAI menolak atau mengabaikan parameter sampling. Belum diverifikasi khusus untuk GPT-6."
+        },
+        "notes": [
+          "Effort yang didukung berbeda per model: GPT-6 Astra menolak 'none', GPT-6.1 Sol menolak 'none' dan 'minimal'. Jika effort ditolak, EZClaw mengulang tanpa field itu.",
+          "Chat Completions tidak mendukung function calling untuk GPT-6 Astra dan GPT-6.1 Sol. Agent dengan tools memakai Responses API (M2)."
+        ]
+      }
+    }
+  ]
+}

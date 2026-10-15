@@ -1,0 +1,20 @@
+{
+  "name": "ezclaw",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.11.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "pnpm --filter @ezclaw/web build && pnpm --filter @ezclaw/server build",
+    "start": "node apps/server/dist/index.js",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "db:generate": "pnpm --filter @ezclaw/server db:generate"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+  }
+}
