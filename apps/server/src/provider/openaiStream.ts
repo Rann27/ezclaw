@@ -32,7 +32,8 @@ function parseUsage(u: Json): Usage {
     inputTokens: num(u.prompt_tokens) ?? num(u.input_tokens),
     outputTokens: num(u.completion_tokens) ?? num(u.output_tokens),
     reasoningTokens: num(rec(u.completion_tokens_details)?.reasoning_tokens) ?? num(rec(u.output_tokens_details)?.reasoning_tokens),
-    cachedTokens: num(rec(u.prompt_tokens_details)?.cached_tokens),
+    // DeepSeek reports cache hits at the top level instead.
+    cachedTokens: num(rec(u.prompt_tokens_details)?.cached_tokens) ?? num(u.prompt_cache_hit_tokens),
     costUsd: num(u.cost),
   };
   return Object.fromEntries(Object.entries(usage).filter(([, v]) => v !== undefined)) as Usage;

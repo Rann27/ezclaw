@@ -3,13 +3,25 @@ import {
   askAnswerSchema,
   codexDirSchema,
   endpointInputSchema,
+  approxTokens,
+  memoryCreateSchema,
+  memoryPatchSchema,
+  webSearchKeySchema,
+  type CheckpointListResponse,
+  type MemoryListResponse,
+  type RestoreResponse,
+  type WebSearchStatus,
+  harnessImportSchema,
   harnessProfilePatchSchema,
+  type HarnessPreviewResponse,
   endpointPatchSchema,
   keyInputSchema,
   manualModelSchema,
   modeSchema,
   modelPatchSchema,
+  mkdirSchema,
   sendEditSchema,
+  type DirListResponse,
   sendImageSchema,
   sendMessageSchema,
   settingsPatchSchema,
@@ -32,8 +44,8 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { desc, isNotNull } from "drizzle-orm";
 import { ZodError } from "zod";
-import { readCodexCatalog } from "./agent/harness.js";
-import { allTools } from "./agent/tools.js";
+import { loadProjectInstructions, readCodexCatalog, renderPrompt } from "./agent/harness.js";
+import { everyTool, selectTools } from "./agent/toolRegistry.js";
 import { defaultShell } from "./agent/shell.js";
 import { Workspace } from "./agent/workspace.js";
 import { threads } from "./db/schema.js";
@@ -41,6 +53,7 @@ import type { ServerConfig } from "./config.js";
 import type { Db } from "./db/client.js";
 import { HttpError, errorBody } from "./errors.js";
 import { MAX_ASSET_BYTES } from "./services/assets.js";
+import { listDirs, makeDir } from "./services/folders.js";
 import { apiGuard, hostGuard, securityHeaders } from "./security.js";
 import type { Services } from "./services/index.js";
 import { getSettings, updateSettings } from "./settings.js";
@@ -57,7 +70,7 @@ export interface AppDeps {
 const HEARTBEAT_MS = 15_000;
 
 export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) {
-  const { registry, runs, chat, secrets, harness, rules, assets, image } = services;
+  const { registry, runs, chat, secrets, harness, rules, assets, image, memory, checkpoints, processes } = services;
   const app = new Hono();
   app.use("*", hostGuard(config.allowedHosts));
   app.use("*", securityHeaders);
@@ -214,14 +227,55 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
     return c.json<RecentWorkspacesResponse>({ workspaces: unique });
   });
 
+  api.get("/fs/dirs", (c) => c.json<DirListResponse>(listDirs(c.req.query("path") || undefined)));
+  api.post("/fs/mkdir", async (c) => {
+    const { parent, name } = mkdirSchema.parse(await readJson(c.req.raw));
+    return c.json({ path: makeDir(parent, name) }, 201);
+  });
+
   /* ------------------------------------------------------------------- harness */
   api.get("/harness", (c) =>
     c.json<HarnessListResponse>({
       profiles: harness.list(),
-      tools: allTools(defaultShell()).map((t) => ({ name: t.name, description: t.def.description, readOnly: t.readOnly })),
+      tools: everyTool(defaultShell()).map((t) => ({ name: t.name, description: t.def.description, readOnly: t.readOnly })),
     }),
   );
   api.post("/harness/:id/duplicate", (c) => c.json(harness.duplicate(c.req.param("id")), 201));
+  api.post("/harness/import", async (c) => {
+    const input = harnessImportSchema.parse(await readJson(c.req.raw));
+    return c.json(harness.importText(input.name, input.mode, input.text), 201);
+  });
+  api.get("/harness/:id/preview", (c) => {
+    const profile = harness.require(c.req.param("id"));
+    const workspace = c.req.query("workspace") ?? "";
+    const rendered = renderPrompt(
+      profile,
+      {
+        date: new Date().toLocaleDateString("sv-SE"),
+        os: process.platform,
+        shell: defaultShell(),
+        workspace: workspace || "(folder workspace)",
+        approval: "ask",
+        modelId: "",
+        userPrompt: "",
+        codexDir: getSettings(db).codexDir,
+        memories: memory.forPrompt(workspace || null),
+      },
+      workspace ? loadProjectInstructions(workspace, profile.projectInstructions) : [],
+    );
+    const tag = profile.userTag;
+    const tools = selectTools(profile.tools, defaultShell(), profile.toolStyle).map((t) => ({ name: t.name, description: t.def.description }));
+    const total = [rendered.text, ...rendered.developer, rendered.context].join("\n");
+    return c.json<HarnessPreviewResponse>({
+      text: rendered.text,
+      developer: rendered.developer,
+      context: rendered.context,
+      userMessage: tag ? `<${tag}>\n…\n</${tag}>` : "…",
+      tools,
+      stableChars: rendered.stableChars,
+      approxTokens: approxTokens(total),
+    });
+  });
   api.patch("/harness/:id", async (c) => {
     const patch = harnessProfilePatchSchema.parse(await readJson(c.req.raw));
     return c.json(harness.update(c.req.param("id"), patch));
@@ -243,6 +297,48 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
     const list: ApprovalRuleDto[] = thread.workspace ? rules.list(thread.workspace) : [];
     return c.json({ rules: list });
   });
+  /* ------------------------------------------------------------- undo and processes */
+  api.get("/threads/:id/checkpoints", (c) => c.json<CheckpointListResponse>({ checkpoints: checkpoints.list(c.req.param("id")) }));
+  api.post("/threads/:id/checkpoints/:runMessageId/restore", (c) => c.json<RestoreResponse>(checkpoints.restore(c.req.param("id"), c.req.param("runMessageId"))));
+  api.get("/threads/:id/processes", (c) => c.json({ processes: processes.list(c.req.param("id")) }));
+  api.post("/threads/:id/processes/:pid/stop", (c) => {
+    try {
+      return c.json(processes.stop(c.req.param("id"), c.req.param("pid")));
+    } catch (err) {
+      throw new HttpError(404, "process_not_found", err instanceof Error ? err.message : "Proses tidak ditemukan.");
+    }
+  });
+
+  /* ------------------------------------------------------------------ memory */
+  api.get("/memories", (c) => c.json<MemoryListResponse>({ memories: memory.list() }));
+  api.post("/memories", async (c) => {
+    const input = memoryCreateSchema.parse(await readJson(c.req.raw));
+    return c.json(memory.create({ text: input.text, scope: input.scope, workspace: input.workspace ?? null, source: "user", status: "active" }), 201);
+  });
+  api.patch("/memories/:id", async (c) => c.json(memory.update(c.req.param("id"), memoryPatchSchema.parse(await readJson(c.req.raw)))));
+  api.delete("/memories/:id", (c) => {
+    memory.remove(c.req.param("id"));
+    return c.body(null, 204);
+  });
+
+  /* -------------------------------------------------------------- web search */
+  api.get("/websearch", (c) => {
+    const provider = getSettings(db).webSearchProvider;
+    return c.json<WebSearchStatus>({ provider, hasKey: !!provider && !!secrets.get(`websearch:${provider}`) });
+  });
+  api.put("/websearch/key", async (c) => {
+    const { provider, key } = webSearchKeySchema.parse(await readJson(c.req.raw));
+    secrets.set(`websearch:${provider}`, key);
+    updateSettings(db, { webSearchProvider: provider });
+    return c.json<WebSearchStatus>({ provider, hasKey: true });
+  });
+  api.delete("/websearch/key", (c) => {
+    const provider = getSettings(db).webSearchProvider;
+    if (provider) secrets.delete(`websearch:${provider}`);
+    updateSettings(db, { webSearchProvider: null });
+    return c.json<WebSearchStatus>({ provider: null, hasKey: false });
+  });
+
   api.delete("/threads/:id/rules/:ruleId", (c) => {
     const thread = chat.detail(c.req.param("id"));
     if (thread.workspace) rules.remove(thread.workspace, c.req.param("ruleId"));

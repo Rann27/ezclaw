@@ -12,6 +12,10 @@ export interface ScriptContext {
   lastResult: string | null;
   /** The last real user message. */
   userText: string;
+  /** The system prompt as sent. */
+  system: string;
+  /** Images anywhere in the request. */
+  images: number;
 }
 
 type Script = (ctx: ScriptContext) => Action[];
@@ -44,6 +48,30 @@ export const SCRIPTS: Record<string, Script> = {
     step === 0
       ? [{ tool: "apply_patch", args: { input: "*** Begin Patch\n*** Update File: a.txt\n@@\n-foo\n+bar\n*** Add File: b.txt\n+baru\n*** End Patch" } }]
       : done("Patch diterapkan."),
+  "agent-glob": ({ step, lastResult }) => (step === 0 ? [{ tool: "glob", args: { pattern: "**/*.txt" } }] : done(`Hasil glob: ${lastResult ?? "?"}`)),
+  "agent-fetch": ({ step, lastResult, userText }) => (step === 0 ? [{ tool: "web_fetch", args: { url: userText.trim() } }] : done(`Halaman: ${lastResult?.slice(0, 400) ?? "?"}`)),
+  "agent-search": ({ step, lastResult }) => (step === 0 ? [{ tool: "web_search", args: { query: "ezclaw" } }] : done(`Cari: ${lastResult ?? "?"}`)),
+  "agent-memory": ({ step }) => (step === 0 ? [{ tool: "propose_memory", args: { text: "Proyek ini memakai pnpm, bukan npm." } }] : done("Sudah diusulkan.")),
+  "agent-image": ({ step, lastResult, images }) => (step === 0 ? [{ tool: "view_image", args: { path: "pic.png" } }] : done(`Gambar di request: ${images}. ${lastResult ?? ""}`)),
+  "agent-skill": ({ step, lastResult }) => (step === 0 ? [{ tool: "read_skill", args: { name: "catatan-rilis" } }] : done(`Skill: ${lastResult?.slice(0, 200) ?? "?"}`)),
+  "agent-two-files": ({ step }) =>
+    step === 0
+      ? [
+          { tool: "write_file", args: { path: "baru.txt", content: "dibuat agent\n" } },
+          { tool: "edit_file", args: { path: "a.txt", old_string: "foo", new_string: "bar" } },
+        ]
+      : done("Dua file diubah."),
+  "agent-process": ({ step, lastResult }) => {
+    const id = /Proses (p\d+)/.exec(lastResult ?? "")?.[1] ?? /^(p\d+)/.exec(lastResult ?? "")?.[1] ?? "p1";
+    if (step === 0) return [{ tool: "start_process", args: { command: "node -e \"console.log('siap'); setInterval(() => console.log('detak'), 200)\"" } }];
+    if (step === 1) return [{ tool: "read_process", args: { id, wait_ms: 800 } }];
+    if (step === 2) return [{ tool: "stop_process", args: { id } }];
+    return done(`Proses selesai: ${lastResult?.slice(0, 80) ?? "?"}`);
+  },
+  "agent-subagent": ({ step, lastResult, system }) => {
+    if (system.includes("research helper")) return step === 0 ? [{ tool: "read_file", args: { path: "hello.txt" } }] : done(`Laporan: ${lastResult ?? "?"}`);
+    return step === 0 ? [{ tool: "spawn_agent", args: { task: "Baca hello.txt dan laporkan isinya." } }] : done(`Induk menerima: ${lastResult ?? "?"}`);
+  },
   "agent-codex": ({ step }) => (step === 0 ? [{ tool: "exec_command", args: { cmd: "echo dari-codex-ref", workdir: "." } }] : done("Selesai lewat exec_command.")),
 };
 
@@ -68,18 +96,27 @@ function textOfContent(content: unknown): string {
     .join("");
 }
 
+const TOOL_IMAGES = "Gambar yang dilampirkan tool";
+
+function countImages(body: unknown): number {
+  return (JSON.stringify(body).match(/data:image\//g) ?? []).length + (JSON.stringify(body).match(/"type":"base64"/g) ?? []).length;
+}
+
 export function contextFromChat(body: Json): ScriptContext {
   const messages = arr(body.messages);
   let lastUser = -1;
   messages.forEach((m, i) => {
-    if (m.role === "user") lastUser = i;
+    if (m.role === "user" && !textOfContent(m.content).startsWith(TOOL_IMAGES)) lastUser = i;
   });
+  const sys = messages.find((m) => m.role === "system" || m.role === "developer");
   const after = messages.slice(lastUser + 1);
   const results = after.filter((m) => m.role === "tool");
   return {
     step: after.filter((m) => m.role === "assistant").length,
     lastResult: results.length ? textOfContent(results.at(-1)!.content) : null,
     userText: lastUser >= 0 ? textOfContent(messages[lastUser]!.content) : "",
+    system: sys ? textOfContent(sys.content) : "",
+    images: countImages(body),
   };
 }
 
@@ -87,7 +124,7 @@ export function contextFromResponses(body: Json): ScriptContext {
   const input = typeof body.input === "string" ? [{ role: "user", content: body.input } as Json] : arr(body.input);
   let lastUser = -1;
   input.forEach((m, i) => {
-    if (m.role === "user") lastUser = i;
+    if (m.role === "user" && !textOfContent(m.content).startsWith(TOOL_IMAGES)) lastUser = i;
   });
   const after = input.slice(lastUser + 1);
   const outputs = after.filter((m) => m.type === "function_call_output");
@@ -95,6 +132,8 @@ export function contextFromResponses(body: Json): ScriptContext {
     step: countTurns(after),
     lastResult: outputs.length ? String(outputs.at(-1)!.output ?? "") : null,
     userText: lastUser >= 0 ? textOfContent(input[lastUser]!.content) : "",
+    system: typeof body.instructions === "string" ? body.instructions : "",
+    images: countImages(body),
   };
 }
 
@@ -124,5 +163,7 @@ export function contextFromAnthropic(body: Json): ScriptContext {
     step: after.filter((m) => m.role === "assistant").length,
     lastResult: resultBlocks.length ? textOfContent(resultBlocks.at(-1)!.content) : null,
     userText: lastUser >= 0 ? textOfContent(messages[lastUser]!.content) : "",
+    system: typeof body.system === "string" ? body.system : textOfContent(body.system),
+    images: countImages(body),
   };
 }

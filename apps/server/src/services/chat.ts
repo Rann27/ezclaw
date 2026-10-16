@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   type ApprovalMode,
+  type HarnessProfile,
   type ImageTurnMeta,
   type MessageDto,
   type SendMessageInput,
@@ -11,15 +12,16 @@ import {
   type ThreadSummary,
 } from "@ezclaw/core";
 import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
-import { loadProjectInstructions, renderSystemPrompt, type HarnessService } from "../agent/harness.js";
+import { loadProjectInstructions, renderPrompt, renderSystemPrompt, withHarnessMessages, type HarnessService, type RenderedPrompt } from "../agent/harness.js";
 import { defaultShell } from "../agent/shell.js";
 import { insertMessage, loadHistory } from "../agent/store.js";
-import { TOOL_NAMES } from "../agent/tools.js";
+import { TOOL_NAMES } from "../agent/toolRegistry.js";
 import { Workspace } from "../agent/workspace.js";
 import type { Db } from "../db/client.js";
 import { messages, models, requestLogs, threads } from "../db/schema.js";
 import { HttpError } from "../errors.js";
 import type { RunManager } from "../runs.js";
+import type { MemoryService } from "./memory.js";
 import type { RegistryService } from "./registry.js";
 
 type ThreadRow = typeof threads.$inferSelect;
@@ -29,7 +31,7 @@ export const DEFAULT_TITLE = "Percakapan baru";
 const TITLE_MAX = 60;
 const LOG_RETENTION_MS = 30 * 24 * 3600_000;
 
-const CHAT_HARNESS: ThreadHarness = { on: false, profileId: "ezclaw-chat", tools: [] };
+const CHAT_HARNESS: ThreadHarness = { on: true, profileId: "ezclaw-chat", tools: [] };
 const AGENT_HARNESS: ThreadHarness = { on: true, profileId: "ezclaw-agent", tools: [] };
 
 export class ChatService {
@@ -39,6 +41,7 @@ export class ChatService {
     private readonly runs: RunManager,
     private readonly harness: HarnessService,
     private readonly codexDir: () => string | null,
+    private readonly memory: MemoryService,
   ) {}
 
   /** Startup housekeeping: answers cut off by a restart, and old request logs. */
@@ -241,27 +244,30 @@ export class ChatService {
     });
 
     history.push({ role: "user", parts: [{ type: "text", text: input.text }] });
+    const prompt = this.chatPrompt(thread, systemPrompt, model.row.modelId);
     const runId = this.runs.startChat({
       threadId,
       assistantMessageId: assistantId,
       modelRowId: input.modelId,
-      system: this.chatSystem(thread, systemPrompt, model.row.modelId),
+      system: prompt.system,
       params,
-      history,
+      history: prompt.profile ? withHarnessMessages(history, prompt.rendered, prompt.profile.userTag) : history,
     });
     return { runId, userMessageId: userId, assistantMessageId: assistantId };
   }
 
   /** Chat's system prompt: the harness text when the harness is on, plus the thread's own prompt. */
-  private chatSystem(thread: ThreadRow, userPrompt: string, modelId: string): string | undefined {
-    if (!thread.harness.on) return renderUserPrompt(userPrompt);
+  private chatPrompt(thread: ThreadRow, userPrompt: string, modelId: string): { system: string | undefined; profile: HarnessProfile | null; rendered: RenderedPrompt } {
+    const none = { developer: [], context: "", text: "", stableChars: 0 };
+    if (!thread.harness.on) return { system: renderUserPrompt(userPrompt), profile: null, rendered: none };
     const profile = this.harness.get(thread.harness.profileId);
-    if (!profile) return renderUserPrompt(userPrompt);
-    return renderSystemPrompt(
+    if (!profile) return { system: renderUserPrompt(userPrompt), profile: null, rendered: none };
+    const rendered = renderPrompt(
       profile,
-      { date: new Date().toLocaleDateString("sv-SE"), os: process.platform, shell: defaultShell(), workspace: "", approval: "ask", modelId, userPrompt: renderUserPrompt(userPrompt) ?? "", codexDir: this.codexDir() },
+      { date: new Date().toLocaleDateString("sv-SE"), os: process.platform, shell: defaultShell(), workspace: "", approval: "ask", modelId, userPrompt: renderUserPrompt(userPrompt) ?? "", codexDir: this.codexDir(), memories: this.memory.forPrompt(null) },
       loadProjectInstructions("", []),
     );
+    return { system: rendered.text || undefined, profile, rendered };
   }
 
   requestLogs(messageId: string) {

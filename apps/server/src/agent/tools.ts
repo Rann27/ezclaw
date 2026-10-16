@@ -37,6 +37,10 @@ export interface ToolEnv {
   signal: AbortSignal;
   setPlan(items: PlanItem[]): void;
   ask(question: string, options?: string[]): Promise<string>;
+  /** Called with a file's absolute path just before a tool changes or removes it, so the run can be undone. */
+  beforeWrite?(abs: string): void;
+  /** Services the newer tools need (processes, web, skills, memory). Absent in plain test setups. */
+  ext?: import("./toolsExtra.js").ToolExtras;
 }
 
 export interface ToolImpl {
@@ -65,7 +69,7 @@ function parseArgs<S extends z.ZodType>(schema: S, args: unknown): z.infer<S> {
   return parsed.data;
 }
 
-function define<S extends z.ZodType>(
+export function define<S extends z.ZodType>(
   name: string,
   description: string,
   schema: S,
@@ -201,7 +205,7 @@ const readFile = define(
   },
 );
 
-function globToRegex(glob: string): RegExp {
+export function globToRegex(glob: string): RegExp {
   let re = "";
   for (let i = 0; i < glob.length; i++) {
     const c = glob[i]!;
@@ -324,6 +328,7 @@ const writeFile = define(
     return {
       need: writeNeed(env, target, exists ? `Timpa ${target.display}` : `Buat ${target.display}`, "write", diffPreview(target.display, before, args.content)),
       async run() {
+        env.beforeWrite?.(target.abs);
         mkdirSync(dirname(target.abs), { recursive: true });
         writeFileSync(target.abs, args.content);
         const lines = args.content === "" ? 0 : args.content.split("\n").length;
@@ -361,6 +366,7 @@ const editFile = define(
     return {
       need: writeNeed(env, target, `Ubah ${target.display}`, "edit", diffPreview(target.display, before, after)),
       async run() {
+        env.beforeWrite?.(target.abs);
         writeFileSync(target.abs, after);
         return { output: `Mengubah ${target.display} (${args.replace_all ? `${count} penggantian` : "1 penggantian"}).` };
       },
@@ -404,6 +410,10 @@ const applyPatch = define(
       need: outside ? { request, autoIn: [], alwaysAsk: true } : { request, autoIn: ["edit", "full"] },
       async run() {
         for (const c of changes) {
+          env.beforeWrite?.(c.target.abs);
+          if (c.moveTo) env.beforeWrite?.(c.moveTo.abs);
+        }
+        for (const c of changes) {
           if (c.kind === "delete") unlinkSync(c.target.abs);
           else {
             const dest = c.moveTo ?? c.target;
@@ -424,7 +434,7 @@ function shellTool(name: string, fields: { command: string; cwd: string; timeout
   const schema = z.object({
     [fields.command]: z.string().min(1).describe("The command line to run."),
     [fields.cwd]: z.string().optional().describe("Directory to run in, relative to the workspace. Defaults to the workspace root."),
-    [fields.timeout]: z.number().int().min(1000).max(600_000).optional().describe("Give up after this many milliseconds."),
+    [fields.timeout]: z.number().int().min(1).max(600_000).optional().describe("Give up after this many milliseconds."),
   });
   return define(name, description, schema, false, (args, env) => {
     const a = args as Record<string, unknown>;
@@ -448,9 +458,20 @@ function shellTool(name: string, fields: { command: string; cwd: string; timeout
     return {
       need: { request, autoIn: ["full"], parsed, alwaysAsk },
       async run() {
-        const timeoutMs = Math.min((a[fields.timeout] as number | undefined) ?? env.config.shellTimeoutMs, 600_000);
+        // Codex's yield_time_ms means "how long to wait before returning", not a kill timer, so exec_command ignores it here.
+        const asked = name === "exec_command" ? undefined : (a[fields.timeout] as number | undefined);
+        const timeoutMs = Math.min(asked ?? env.config.shellTimeoutMs, 600_000);
         const result = await runShell({ command, cwd: cwd.abs, shell: env.shell, timeoutMs, signal: env.signal });
         const secs = (result.durationMs / 1000).toFixed(1);
+        if (name === "exec_command") {
+          // Codex's output header, field for field.
+          const budget = typeof a.max_output_tokens === "number" ? Math.max(1, a.max_output_tokens) * 4 : Infinity;
+          const out = result.output.trimEnd();
+          const shown = out.length > budget ? `${out.slice(0, budget)}\n... [output dipotong ke ${a.max_output_tokens} token]` : out;
+          const exit = result.timedOut ? `Process timed out after ${Math.round(timeoutMs / 1000)} seconds` : result.stopped ? "Process stopped by user" : `Process exited with code ${result.exitCode ?? -1}`;
+          const chunk = Math.random().toString(16).slice(2, 8);
+          return { output: `Chunk ID: ${chunk}\nWall time: ${(result.durationMs / 1000).toFixed(4)} seconds\n${exit}\nOriginal token count: ${Math.ceil(out.length / 4)}\nOutput:\n${shown}`, isError: result.timedOut || result.stopped || result.exitCode !== 0 };
+        }
         const status = result.timedOut
           ? `Timed out setelah ${Math.round(timeoutMs / 1000)} detik, proses dihentikan.`
           : result.stopped
@@ -519,16 +540,6 @@ export function allTools(shell: ShellKind): ToolImpl[] {
     updatePlan,
     askUser,
   ];
-}
-
-export const TOOL_NAMES = ["list_dir", "read_file", "search", "write_file", "edit_file", "apply_patch", "shell", "exec_command", "update_plan", "ask_user"] as const;
-
-export function selectTools(names: string[], shell: ShellKind): ToolImpl[] {
-  const all = new Map(allTools(shell).map((t) => [t.name, t]));
-  return names.flatMap((n) => {
-    const t = all.get(n);
-    return t ? [t] : [];
-  });
 }
 
 /** Head and tail of long output, with the middle replaced by a marker. */

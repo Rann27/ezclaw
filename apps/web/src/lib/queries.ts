@@ -1,5 +1,8 @@
 import type {
   ApprovalRuleDto,
+  CheckpointListResponse,
+  MemoryListResponse,
+  WebSearchStatus,
   CatalogResponse,
   HarnessListResponse,
   RecentWorkspacesResponse,
@@ -27,6 +30,10 @@ export const keys = {
   harness: ["harness"] as const,
   workspaces: ["workspaces"] as const,
   rules: (threadId: string) => ["rules", threadId] as const,
+  memories: ["memories"] as const,
+  checkpoints: (threadId: string) => ["checkpoints", threadId] as const,
+  processes: (threadId: string) => ["processes", threadId] as const,
+  webSearch: ["websearch"] as const,
 };
 
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api<Settings>("/settings") });
@@ -69,3 +76,15 @@ export const useHarness = () => useQuery({ queryKey: keys.harness, queryFn: () =
 export const useRecentWorkspaces = () => useQuery({ queryKey: keys.workspaces, queryFn: () => api<RecentWorkspacesResponse>("/workspaces/recent") });
 export const useThreadRules = (threadId: string | undefined) =>
   useQuery({ queryKey: keys.rules(threadId ?? ""), queryFn: () => api<{ rules: ApprovalRuleDto[] }>(`/threads/${threadId}/rules`), enabled: !!threadId });
+
+export const useMemories = () => useQuery({ queryKey: keys.memories, queryFn: () => api<MemoryListResponse>("/memories") });
+export const useCheckpoints = (threadId: string | undefined) =>
+  useQuery({ queryKey: keys.checkpoints(threadId ?? ""), queryFn: () => api<CheckpointListResponse>(`/threads/${threadId}/checkpoints`), enabled: !!threadId });
+export const useProcesses = (threadId: string | undefined) =>
+  useQuery({
+    queryKey: keys.processes(threadId ?? ""),
+    queryFn: () => api<{ processes: { id: string; command: string; running: boolean; exitCode: number | null; startedSeconds: number }[] }>(`/threads/${threadId}/processes`),
+    enabled: !!threadId,
+    refetchInterval: 5000,
+  });
+export const useWebSearch = () => useQuery({ queryKey: keys.webSearch, queryFn: () => api<WebSearchStatus>("/websearch") });

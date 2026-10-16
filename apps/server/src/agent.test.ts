@@ -104,9 +104,13 @@ describe.each<Wire>(["openai-chat", "openai-responses", "anthropic"])("agent loo
     expect(calls).toHaveLength(2);
     const first = calls[0]!.body!;
     const toolNames = (first.tools as { name?: string; function?: { name: string } }[]).map((t) => t.name ?? t.function?.name);
-    expect(toolNames).toEqual(["list_dir", "read_file", "search", "edit_file", "write_file", "shell", "update_plan", "ask_user"]);
-    const system = wire === "anthropic" ? first.system : wire === "openai-responses" ? first.instructions : (first.messages as { role: string; content: string }[])[0]?.content;
+    expect(toolNames).toEqual(["list_dir", "glob", "read_file", "search", "edit_file", "write_file", "shell", "start_process", "read_process", "stop_process", "view_image", "web_fetch", "web_search", "spawn_agent", "read_skill", "update_plan", "ask_user", "propose_memory"]);
+    const anthropicSystem = first.system as { text: string; cache_control?: unknown }[] | undefined;
+    if (wire === "anthropic") expect(anthropicSystem?.[0]?.cache_control).toEqual({ type: "ephemeral" });
+    const system = wire === "anthropic" ? anthropicSystem?.[0]?.text : wire === "openai-responses" ? first.instructions : (first.messages as { role: string; content: string }[])[0]?.content;
     expect(String(system)).toContain("You are EZClaw Agent");
+    // The date comes after the stable instructions, so the prompt prefix stays cacheable.
+    expect(String(system).indexOf("Date:")).toBeGreaterThan(String(system).indexOf("# Talking to the user"));
     expect(String(system)).toContain(ws);
 
     // The provider's own turn (reasoning included) is replayed unchanged.
@@ -376,7 +380,7 @@ describe("harness", () => {
     await setMode(thread.id, "full");
     const events = await collectRun(ctx, (await send(thread.id, model.id)).runId);
     expect((sentTools()[0]!.messages as { content: string }[])[0]!.content).toContain("INSTRUKSI-CODEX-UJI");
-    expect((sentTools()[0]!.tools as { function: { name: string } }[]).map((t) => t.function.name)).toEqual(["exec_command", "apply_patch", "update_plan"]);
+    expect((sentTools()[0]!.tools as { function: { name: string } }[]).map((t) => t.function.name)).toEqual(["exec_command", "apply_patch", "update_plan", "view_image"]);
     const result = events.find((e) => e.type === "tool_result") as Extract<RunEvent, { type: "tool_result" }>;
     expect(result.output).toContain("dari-codex-ref");
   });
@@ -399,7 +403,7 @@ describe("threads", () => {
     expect((await ctx.req("/api/threads", post({ mode: "agent", workspace: "relatif/saja" }))).status).toBe(400);
 
     const chat = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat" }));
-    expect(chat).toMatchObject({ workspace: null, harness: { on: false, profileId: "ezclaw-chat" } });
+    expect(chat).toMatchObject({ workspace: null, harness: { on: true, profileId: "ezclaw-chat" } });
     expect((await ctx.req(`/api/threads/${chat.id}`, patch({ approvalMode: "edit" }))).status).toBe(400);
   });
 

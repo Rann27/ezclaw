@@ -155,6 +155,18 @@ const DEFAULT_ANTHROPIC_MAX_TOKENS = 16000;
 const DEFAULT_ANTHROPIC_BUDGET = 8000;
 const MIN_ANTHROPIC_BUDGET = 1024;
 
+/**
+ * Puts a cache breakpoint on the newest content block, so a long conversation or agent run is read
+ * from cache on the next request instead of being billed again in full.
+ */
+function markLastForCache(messages: Record<string, unknown>[]) {
+  const last = messages.at(-1);
+  if (!last || !Array.isArray(last.content) || !last.content.length) return;
+  const blocks = last.content as Record<string, unknown>[];
+  const i = blocks.length - 1;
+  blocks[i] = { ...blocks[i], cache_control: { type: "ephemeral" } };
+}
+
 export function buildChatRequest(input: ChatRequestInput): BuiltRequest {
   const { protocol, profile, params } = input;
   const dropped: DroppedParam[] = [];
@@ -165,12 +177,19 @@ export function buildChatRequest(input: ChatRequestInput): BuiltRequest {
   const body: Record<string, unknown> = { model: input.modelId, stream: true };
   if (protocol === "anthropic") {
     body.messages = toAnthropicMessages(input.messages);
-    if (input.system) body.system = input.system;
+    // No developer role here: those messages join the system prompt, in order.
+    const developer = input.messages.filter((m) => m.role === "developer").map((m) => m.parts.map((p) => (p.type === "text" ? p.text : "")).join(""));
+    const system = [input.system, ...developer].filter(Boolean).join("\n\n") || undefined;
+    if (system) body.system = profile.promptCache ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }] : system;
+    if (profile.promptCache) markLastForCache(body.messages as Record<string, unknown>[]);
   } else if (protocol === "openai-responses") {
     body.input = toResponsesInput(input.messages);
     if (input.system) body.instructions = input.system;
   } else {
-    body.messages = toOpenAIChatMessages(input.messages, input.system, { systemRole: profile.systemRole, reasoningReplay: profile.reasoningReplay });
+    const messages = toOpenAIChatMessages(input.messages, input.system, { systemRole: profile.systemRole, reasoningReplay: profile.reasoningReplay });
+    // OpenRouter passes cache_control through to Claude models when the content is a list of parts.
+    if (profile.promptCache && input.system && messages[0]) messages[0] = { ...messages[0], content: [{ type: "text", text: input.system, cache_control: { type: "ephemeral" } }] };
+    body.messages = messages;
     if (profile.streamUsage) body.stream_options = { include_usage: true };
   }
   applyTools(body, protocol, input.tools, input.toolChoice);

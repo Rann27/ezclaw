@@ -8,6 +8,7 @@ import { ImagePage } from "./pages/ImagePage";
 import { EndpointsPage } from "./pages/settings/EndpointsPage";
 import { GeneralPage } from "./pages/settings/GeneralPage";
 import { HarnessPage } from "./pages/settings/HarnessPage";
+import { MemoryPage } from "./pages/settings/MemoryPage";
 import { ModelsPage } from "./pages/settings/ModelsPage";
 import { SettingsLayout } from "./pages/settings/SettingsLayout";
 
@@ -76,6 +77,7 @@ const settingsIndex = createRoute({ getParentRoute: () => settingsRoute, path: "
 const settingsEndpoints = createRoute({ getParentRoute: () => settingsRoute, path: "endpoints", component: EndpointsPage });
 const settingsModels = createRoute({ getParentRoute: () => settingsRoute, path: "models", component: ModelsPage });
 const settingsHarness = createRoute({ getParentRoute: () => settingsRoute, path: "harness", component: HarnessPage });
+const settingsMemory = createRoute({ getParentRoute: () => settingsRoute, path: "memory", component: MemoryPage });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -83,7 +85,7 @@ const routeTree = rootRoute.addChildren([
   agentRoute,
   imageRoute,
   editRoute,
-  settingsRoute.addChildren([settingsIndex, settingsEndpoints, settingsModels, settingsHarness]),
+  settingsRoute.addChildren([settingsIndex, settingsEndpoints, settingsModels, settingsHarness, settingsMemory]),
 ]);
 
 export const router = createRouter({ routeTree });

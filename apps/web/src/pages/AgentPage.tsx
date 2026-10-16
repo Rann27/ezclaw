@@ -1,9 +1,10 @@
-import { APPROVAL_MODES, APPROVAL_MODE_LABELS, type ApprovalMode, type ChatParams, type MessageDto, type ModelDto, type SendMessageResponse, type ThreadDetailDto, type ThreadHarness, type WorkspaceCheckResponse } from "@ezclaw/core";
+import { APPROVAL_MODES, APPROVAL_MODE_LABELS, type ApprovalMode, type ChatParams, type MessageDto, type ModelDto, type SendMessageResponse, type ThreadDetailDto, type ThreadHarness, type WorkspaceCheckResponse, type CheckpointDto, type RestoreResponse } from "@ezclaw/core";
 import { ArrowDownIcon, FolderSimpleIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
+import { FolderPicker } from "../components/agent/FolderPicker";
 import { AgentInspector } from "../components/agent/AgentInspector";
 import { AgentTimeline, PlanPanel } from "../components/agent/AgentTimeline";
 import { useAgentRun } from "../components/agent/useAgentRun";
@@ -13,7 +14,7 @@ import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
 import { Composer } from "../components/chat/Composer";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
-import { keys, useEndpoints, useModels, useRecentWorkspaces, useSettings, useThread } from "../lib/queries";
+import { keys, useCheckpoints, useEndpoints, useModels, useRecentWorkspaces, useSettings, useThread } from "../lib/queries";
 
 const LAST_MODEL_KEY = "ezclaw.lastAgentModel";
 const LAST_WORKSPACE_KEY = "ezclaw.lastWorkspace";
@@ -91,6 +92,10 @@ export function AgentPage() {
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmFull, setConfirmFull] = useState(false);
+  const checkpoints = useCheckpoints(threadId);
+  const [undoing, setUndoing] = useState<CheckpointDto | null>(null);
+  const [undoResult, setUndoResult] = useState<RestoreResponse | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
 
   /* ----------------------------------------------------- draft initialisation */
   const loadedThread = thread.data?.id;
@@ -333,6 +338,13 @@ export function AgentPage() {
                 onDecide={(id, d, r) => decide(id, d, r)}
                 onAnswer={(id, a) => answer(id, a)}
                 onRetry={retry}
+                threadId={threadId ?? ""}
+                checkpoints={checkpoints.data?.checkpoints ?? []}
+                onUndo={(cp) => {
+                  setUndoResult(null);
+                  setUndoError(null);
+                  setUndoing(cp);
+                }}
                 canRetry={!running}
               />
             )}
@@ -410,6 +422,78 @@ export function AgentPage() {
       <RequestLogDialog messageId={logFor} onClose={() => setLogFor(null)} />
 
       <Dialog
+        open={undoing !== null}
+        onClose={() => setUndoing(null)}
+        title={undoResult ? "Perubahan dibatalkan" : "Batalkan perubahan file dari tugas ini?"}
+        width="max-w-lg"
+        footer={
+          undoResult ? (
+            <button type="button" className="btn btn-primary" onClick={() => setUndoing(null)}>
+              Tutup
+            </button>
+          ) : (
+            <>
+              <button type="button" className="btn btn-ghost" onClick={() => setUndoing(null)}>
+                Batal
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={async () => {
+                  if (!undoing || !threadId) return;
+                  setUndoError(null);
+                  try {
+                    const res = await api<RestoreResponse>(`/threads/${threadId}/checkpoints/${undoing.runMessageId}/restore`, { method: "POST", body: "{}" });
+                    setUndoResult(res);
+                    void qc.invalidateQueries({ queryKey: keys.checkpoints(threadId) });
+                  } catch (err) {
+                    setUndoError(err instanceof Error ? err.message : "Gagal mengembalikan file.");
+                  }
+                }}
+              >
+                Kembalikan file
+              </button>
+            </>
+          )
+        }
+      >
+        {undoing && !undoResult && (
+          <div className="grid gap-3 text-body text-fg-2">
+            <p>File di bawah dikembalikan ke isinya sebelum tugas ini dimulai. File yang dibuat tugas ini dihapus. Perubahan sesudahnya pada file yang sama juga ikut hilang.</p>
+            <ul className="grid max-h-56 gap-1 overflow-y-auto rounded-sm bg-sunken p-2 font-code text-dense">
+              {undoing.files.map((f) => (
+                <li key={f.path} className="break-all">
+                  {f.created ? "hapus " : "kembalikan "}
+                  {f.path}
+                  {!f.restorable && <span className="text-danger-text"> (terlalu besar, tidak bisa)</span>}
+                </li>
+              ))}
+            </ul>
+            <p className="text-dense text-fg-3">Hanya perubahan lewat tools file EZClaw yang tercatat. Yang diubah lewat perintah shell tidak ikut dikembalikan.</p>
+          </div>
+        )}
+        {undoResult && (
+          <div className="grid gap-2 text-body text-fg-2">
+            <p>{undoResult.restored.length} file dikembalikan.</p>
+            {undoResult.skipped.length > 0 && (
+              <ul className="grid gap-1 rounded-sm bg-danger-soft p-2 text-dense text-danger-text">
+                {undoResult.skipped.map((s) => (
+                  <li key={s.path}>
+                    {s.path}: {s.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {undoError && (
+          <p className="mt-2 rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text" role="alert">
+            {undoError}
+          </p>
+        )}
+      </Dialog>
+
+      <Dialog
         open={confirmFull}
         onClose={() => setConfirmFull(false)}
         title="Nyalakan Otomatis penuh?"
@@ -483,8 +567,13 @@ function NewTask({ noEndpoints, value, onChange, recent }: { noEndpoints: boolea
   const id = useId();
   const [check, setCheck] = useState<WorkspaceCheckResponse | null>(null);
   const [checking, setChecking] = useState(false);
+  const [picking, setPicking] = useState(false);
+  // A folder chosen in the picker is already known to exist; only typing clears the check.
+  const picked = useRef<string | null>(null);
 
-  useEffect(() => setCheck(null), [value]);
+  useEffect(() => {
+    if (value !== picked.current) setCheck(null);
+  }, [value]);
 
   async function verify() {
     setChecking(true);
@@ -521,16 +610,32 @@ function NewTask({ noEndpoints, value, onChange, recent }: { noEndpoints: boolea
         </label>
         <div className="flex flex-wrap gap-2">
           <input id={id} className="input min-w-60 flex-1 font-code" value={value} placeholder="F:\proyek\aplikasi" spellCheck={false} onChange={(e) => onChange(e.target.value)} />
+          <button type="button" className="btn btn-primary" onClick={() => setPicking(true)}>
+            <FolderSimpleIcon size={16} aria-hidden />
+            Pilih folder
+          </button>
           <button type="button" className="btn btn-secondary" disabled={!value.trim() || checking} onClick={() => void verify()}>
-            {checking ? "Memeriksa" : "Periksa folder"}
+            {checking ? "Memeriksa" : "Periksa"}
           </button>
         </div>
+        <FolderPicker
+          open={picking}
+          onClose={() => setPicking(false)}
+          initial={value.trim() || recent[0] || null}
+          recent={recent}
+          onPick={(p) => {
+            picked.current = p;
+            onChange(p);
+            setPicking(false);
+            setCheck({ ok: true, root: p });
+          }}
+        />
         {check && (
           <p className={check.ok ? "text-dense text-fg-2" : "rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text"} role={check.ok ? "status" : "alert"}>
             {check.ok ? `Folder ditemukan: ${check.root}` : check.message}
           </p>
         )}
-        <p className="text-meta text-fg-3">Tulis path absolut. Browser tidak bisa membuka pemilih folder yang mengembalikan path lengkap.</p>
+        <p className="text-meta text-fg-3">Pilih lewat tombol, atau ketik path absolut.</p>
       </div>
       {recent.length > 0 && (
         <div className="grid gap-1.5">

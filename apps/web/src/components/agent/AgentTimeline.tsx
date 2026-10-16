@@ -1,6 +1,10 @@
-import type { MessageDto, Part, PlanItem, Usage } from "@ezclaw/core";
-import { CaretRightIcon, CodeIcon } from "@phosphor-icons/react";
-import { lazy, Suspense, useMemo } from "react";
+import type { CheckpointDto, MessageDto, Part, PlanItem, Usage } from "@ezclaw/core";
+import { ArrowCounterClockwiseIcon, CaretRightIcon, CodeIcon } from "@phosphor-icons/react";
+import { useQueryClient } from "@tanstack/react-query";
+import { lazy, Suspense, useMemo, useState } from "react";
+import { api } from "../../api";
+import { keys, useMemories } from "../../lib/queries";
+import { AssetImage } from "../image/AssetImage";
 import { AskPanel, ApprovalPanel, DiffView } from "./Interactions";
 import type { CallStatus, LiveAgent, LiveApproval, LiveAsk, LiveCall } from "./useAgentRun";
 
@@ -19,6 +23,8 @@ export interface CallView {
   durationMs?: number;
   approval?: LiveApproval;
   ask?: LiveAsk;
+  /** Images the tool attached (view_image). */
+  images?: string[];
 }
 
 function textOf(m: MessageDto): string {
@@ -59,6 +65,25 @@ export function describeCall(name: string, args: unknown): string {
       return "memperbarui rencana";
     case "ask_user":
       return str("question");
+    case "glob":
+      return `${str("pattern")}${str("path") ? ` di ${str("path")}` : ""}`;
+    case "view_image":
+      return str("path");
+    case "start_process":
+      return str("command");
+    case "read_process":
+    case "stop_process":
+      return str("id");
+    case "web_fetch":
+      return str("url");
+    case "web_search":
+      return `"${str("query")}"`;
+    case "spawn_agent":
+      return str("task").length > 90 ? `${str("task").slice(0, 89)}…` : str("task");
+    case "read_skill":
+      return str("name");
+    case "propose_memory":
+      return str("text");
     default:
       return "";
   }
@@ -84,10 +109,12 @@ const STATUS_LABEL: Record<CallStatus, string> = {
 
 function ToolCallCard({
   call,
+  threadId,
   onDecide,
   onAnswer,
 }: {
   call: CallView;
+  threadId: string;
   onDecide: (approvalId: string, decision: "allow" | "allow_always" | "deny", reason?: string) => Promise<void>;
   onAnswer: (askId: string, answer: string) => Promise<void>;
 }) {
@@ -124,6 +151,13 @@ function ToolCallCard({
             <summary className="cursor-pointer text-meta text-fg-3">Argumen</summary>
             <pre className="m-0 mt-1 max-h-48 overflow-auto rounded-sm bg-sunken p-2 font-code text-meta whitespace-pre-wrap break-words">{argsText}</pre>
           </details>
+          {call.images && call.images.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {call.images.map((id) => (
+                <AssetImage key={id} assetId={id} alt={`Gambar dari ${describeCall(call.name, call.args)}`} className="max-h-48 w-auto rounded-sm border border-line" contain />
+              ))}
+            </div>
+          )}
           {call.output !== undefined && (
             <div className="grid gap-1">
               <span className="text-meta text-fg-3">Hasil</span>
@@ -132,6 +166,7 @@ function ToolCallCard({
           )}
         </div>
       </details>
+      {call.name === "propose_memory" && call.status === "done" && <MemoryProposal threadId={threadId} text={String((call.args as { text?: unknown })?.text ?? "")} />}
       {call.approval && <ApprovalPanel approval={call.approval} onDecide={(d, r) => onDecide(call.approval!.approvalId, d, r)} />}
       {call.ask && <AskPanel ask={call.ask} onAnswer={(a) => onAnswer(call.ask!.askId, a)} />}
     </div>
@@ -144,6 +179,7 @@ function formatUsage(u: Usage | null): string | null {
   if (u.inputTokens !== undefined) parts.push(`${u.inputTokens} masuk`);
   if (u.outputTokens !== undefined) parts.push(`${u.outputTokens} keluar`);
   if (u.reasoningTokens) parts.push(`${u.reasoningTokens} reasoning`);
+  if (u.cachedTokens) parts.push(`${u.cachedTokens} dari cache`);
   return parts.length ? `${parts.join(" · ")} token` : null;
 }
 
@@ -182,13 +218,29 @@ interface TimelineProps {
   onAnswer: (askId: string, answer: string) => Promise<void>;
   onRetry: () => void;
   canRetry: boolean;
+  threadId: string;
+  /** File changes recorded per task, for the undo link under each request. */
+  checkpoints: CheckpointDto[];
+  onUndo: (checkpoint: CheckpointDto) => void;
 }
 
-export function AgentTimeline({ messages, live, running, onShowRequest, onDecide, onAnswer, onRetry, canRetry }: TimelineProps) {
+export function AgentTimeline({ messages, live, running, onShowRequest, onDecide, onAnswer, onRetry, canRetry, threadId, checkpoints, onUndo }: TimelineProps) {
   // Results saved with the thread, keyed by the call they answer.
   const saved = useMemo(() => {
     const map = new Map<string, ToolResultPart>();
     for (const m of messages) if (m.role === "tool") for (const p of m.parts) if (p.type === "tool_result") map.set(p.callId, p);
+    return map;
+  }, [messages]);
+
+  // Images a tool attached, keyed by the call that made them (matched by the path the call asked for).
+  const toolImages = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const m of messages) {
+      if (m.role !== "tool") continue;
+      const images = m.parts.filter((p): p is Extract<Part, { type: "image" }> => p.type === "image");
+      if (!images.length) continue;
+      for (const r of m.parts) if (r.type === "tool_result" && r.name === "view_image") map.set(r.callId, images.map((i) => i.assetId));
+    }
     return map;
   }, [messages]);
 
@@ -199,9 +251,25 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
       {messages.map((m) => {
         if (m.role === "tool") return null;
         if (m.role === "user") {
+          const cp = checkpoints.find((c) => c.runMessageId === m.id);
           return (
-            <div key={m.id} className="flex justify-end">
+            <div key={m.id} className="grid justify-items-end gap-1">
               <div className="max-w-[min(56ch,100%)] whitespace-pre-wrap break-words rounded-md bg-sunken px-4 py-3 text-body">{textOf(m)}</div>
+              {cp && (
+                <p className="flex flex-wrap items-center gap-2 text-meta text-fg-3">
+                  {cp.restoredAt ? (
+                    <span>Perubahan file dari tugas ini sudah dibatalkan.</span>
+                  ) : (
+                    <>
+                      <span>Tugas ini mengubah {cp.files.length} file.</span>
+                      <button type="button" className="btn btn-ghost min-h-7 px-2 text-meta" disabled={running} onClick={() => onUndo(cp)}>
+                        <ArrowCounterClockwiseIcon size={14} aria-hidden />
+                        Batalkan perubahan file
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           );
         }
@@ -217,7 +285,7 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
           const approval = live?.approvals.find((a) => a.callId === p.callId);
           const ask = live?.asks.find((a) => a.callId === p.callId);
           if (result) {
-            return { callId: p.callId, name: p.name, args: p.args, argsError: p.argsError, status: result.denied ? "denied" : result.isError ? "error" : "done", output: result.output, durationMs: liveCall?.durationMs };
+            return { callId: p.callId, name: p.name, args: p.args, argsError: p.argsError, status: result.denied ? "denied" : result.isError ? "error" : "done", output: result.output, durationMs: liveCall?.durationMs, images: toolImages.get(p.callId) };
           }
           return {
             callId: p.callId,
@@ -266,7 +334,7 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
             {calls.length > 0 && (
               <div className="grid gap-2">
                 {calls.map((c) => (
-                  <ToolCallCard key={c.callId} call={c} onDecide={onDecide} onAnswer={onAnswer} />
+                  <ToolCallCard key={c.callId} call={c} threadId={threadId} onDecide={onDecide} onAnswer={onAnswer} />
                 ))}
               </div>
             )}
@@ -308,6 +376,55 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
         );
       })}
     </div>
+  );
+}
+
+/** A memory the model proposed, waiting for the owner. It is saved only after "Simpan". */
+function MemoryProposal({ threadId, text }: { threadId: string; text: string }) {
+  const memories = useMemories();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const memory = memories.data?.memories.find((m) => m.threadId === threadId && m.source === "agent" && m.text === text);
+  if (!memory) return memories.isSuccess ? <p className="pl-1 text-meta text-fg-3">Usulan memori ini sudah ditolak atau dihapus.</p> : null;
+
+  const act = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      await qc.invalidateQueries({ queryKey: keys.memories });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (memory.status === "active") return <p className="pl-1 text-meta text-fg-3">Disimpan ke memori {memory.scope === "global" ? "umum" : "folder ini"}.</p>;
+  return (
+    <section aria-label="Usulan memori" className="grid gap-2 rounded-md bg-ember-soft p-3">
+      <p className="text-dense font-semibold text-ember-text">Agent mengusulkan untuk mengingat:</p>
+      <p className="text-ui">{memory.text}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act(() => api(`/memories/${memory.id}`, { method: "PATCH", body: JSON.stringify({ status: "active" }) }))}>
+          Simpan {memory.scope === "global" ? "untuk semua" : "untuk folder ini"}
+        </button>
+        {memory.scope === "workspace" && (
+          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void act(() => api(`/memories/${memory.id}`, { method: "PATCH", body: JSON.stringify({ status: "active", scope: "global" }) }))}>
+            Simpan untuk semua thread
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void act(() => api(`/memories/${memory.id}`, { method: "DELETE" }))}>
+          Tolak
+        </button>
+      </div>
+      {error && (
+        <p className="text-dense text-danger-text" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 

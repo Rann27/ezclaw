@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 export type ShellKind = "powershell" | "bash";
 
@@ -125,7 +125,7 @@ export interface ShellRun {
 const KEEP_HEAD = 120_000;
 const KEEP_TAIL = 120_000;
 
-function cleanEnv(): NodeJS.ProcessEnv {
+export function cleanEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(process.env)) {
     // The agent runs with the owner's environment, minus EZClaw's own session secrets.
@@ -134,7 +134,7 @@ function cleanEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-function spawnArgs(shell: ShellKind, command: string): { file: string; args: string[] } {
+export function spawnArgs(shell: ShellKind, command: string): { file: string; args: string[] } {
   if (shell === "powershell") {
     // PowerShell reports 1 for any failed native command; this passes the real exit code through.
     const script = `$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${command}
@@ -143,6 +143,21 @@ $ezOk = $?; if (-not $ezOk) { if ($LASTEXITCODE) { exit $LASTEXITCODE } else { e
     return { file: "powershell.exe", args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded] };
   }
   return { file: "bash", args: ["-lc", command] };
+}
+
+/** Stops a process and everything it started. */
+export function killTree(pid: number | undefined) {
+  if (!pid) return;
+  if (process.platform === "win32") {
+    // Waits for taskkill, so the process no longer holds its folder when this returns.
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore", timeout: 10_000 });
+  } else {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      // Already gone.
+    }
+  }
 }
 
 export function runShell(opts: { command: string; cwd: string; shell: ShellKind; timeoutMs: number; signal: AbortSignal }): Promise<ShellRun> {

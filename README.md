@@ -5,9 +5,11 @@ Workbench AI lokal: chat, agent loop, generate gambar, dan edit gambar berbasis 
 Status: **M0 sampai M4 selesai**. Empat mode dalam satu aplikasi lokal:
 
 - **Chat**: percakapan streaming ke model dari banyak provider, dengan panel parameter yang mengikuti kemampuan model dan harness yang bisa dinyalakan atau dimatikan.
-- **Agent**: loop agent yang bekerja di satu folder (baca, cari, ubah file, jalankan perintah) dengan persetujuan, rencana, dan pemadatan konteks. Profil harness diatur di Settings, Harness, termasuk profil Codex-ref.
+- **Agent**: loop agent yang bekerja di satu folder (baca, cari, ubah file, jalankan perintah) dengan persetujuan, rencana, dan pemadatan konteks. Profil harness diatur di Settings, Harness, termasuk profil Codex yang meniru susunan request Codex.
 - **Image**: generate gambar dari prompt dan gambar referensi lewat lima jalur provider, dengan Prompt Composer untuk pesan lanjutan. Prompt yang dikirim selalu terlihat.
 - **Edit**: ubah satu gambar target dengan referensi berperan dan chip Pertahankan, simpan tiap hasil sebagai versi berantai, dan bandingkan dua versi.
+
+Agent dan Chat memakai **wrapper bersegmen** yang bisa dinyalakan, dimatikan, dan diubah per bagian (bawaan: EZClaw, gaya Cowork, Codex hardcode dan Codex dari instalasimu, serta tiga gaya chat), dengan urutan yang ramah prompt caching, **memori** lintas thread yang diusulkan model dan disetujui kamu, dan tools Agent tambahan: glob, proses latar, lihat gambar, web fetch dan search, subagent, skills, serta undo perubahan file. Detailnya di [`docs/HARNESS.md`](docs/HARNESS.md).
 
 Semua diuji dengan server tiruan; belum dengan key provider asli. Catatan verifikasi dokumentasi provider ada di [`docs/PROVIDERS.md`](docs/PROVIDERS.md), temuan Codex di [`docs/CODEX-HARNESS.md`](docs/CODEX-HARNESS.md).
 

@@ -36,13 +36,21 @@ export const settingsSchema = z.object({
   autoRetryRejectedParams: z.boolean(),
   /** Folder of an existing Codex install, whose models.json the "Codex-ref" harness profile reads. */
   codexDir: z.string().max(1000).nullable(),
+  /** Which service the web_search tool uses. Its key lives in the secret store, not here. */
+  webSearchProvider: z.enum(["brave", "tavily", "exa"]).nullable(),
+  /** Extra folders that hold skills (each skill is a folder with SKILL.md), besides EZClaw's own. */
+  skillDirs: z.array(z.string().max(1000)).max(10),
 });
+
+export const WEB_SEARCH_PROVIDERS = ["brave", "tavily", "exa"] as const;
+export type WebSearchProvider = (typeof WEB_SEARCH_PROVIDERS)[number];
+export const WEB_SEARCH_LABELS: Record<WebSearchProvider, string> = { brave: "Brave Search", tavily: "Tavily", exa: "Exa" };
 export type Settings = z.infer<typeof settingsSchema>;
 
 export const settingsPatchSchema = settingsSchema.partial().strict();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
-export const DEFAULT_SETTINGS: Settings = { theme: "system", defaultModels: {}, autoRetryRejectedParams: true, codexDir: null };
+export const DEFAULT_SETTINGS: Settings = { theme: "system", defaultModels: {}, autoRetryRejectedParams: true, codexDir: null, webSearchProvider: null, skillDirs: [] };
 
 export interface HealthResponse {
   ok: true;

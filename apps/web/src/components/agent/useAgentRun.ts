@@ -166,6 +166,12 @@ export function useAgentRun(threadId: string | undefined, activeRun: { runId: st
           case "compaction":
             void refresh();
             break;
+          case "memory_proposed":
+            void qc.invalidateQueries({ queryKey: keys.memories });
+            return;
+          case "checkpoint":
+            void qc.invalidateQueries({ queryKey: keys.checkpoints(forThread) });
+            return;
           default:
             return;
         }

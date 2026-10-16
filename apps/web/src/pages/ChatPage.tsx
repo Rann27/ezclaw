@@ -18,7 +18,7 @@ import { keys, useEndpoints, useModels, useSettings, useThread } from "../lib/qu
 const LAST_MODEL_KEY = "ezclaw.lastModel";
 const WIDE = "(min-width: 1280px)";
 
-const CHAT_HARNESS: ThreadHarness = { on: false, profileId: "ezclaw-chat", tools: [] };
+const CHAT_HARNESS: ThreadHarness = { on: true, profileId: "ezclaw-chat", tools: [] };
 
 interface Draft {
   modelId: string | null;

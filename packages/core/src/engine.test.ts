@@ -192,7 +192,7 @@ describe("parameter engine: anthropic", () => {
   it("sends system at the top level, requires max_tokens, and targets /v1/messages", () => {
     const req = build("anthropic", [], {}, [], "Jawab singkat.");
     expect(req.path).toBe("/v1/messages");
-    expect(req.body.system).toBe("Jawab singkat.");
+    expect(req.body.system).toEqual([{ type: "text", text: "Jawab singkat.", cache_control: { type: "ephemeral" } }]);
     expect(req.body.max_tokens).toBe(16000);
     expect(req.body).not.toHaveProperty("stream_options");
     expect((req.body.messages as { role: string }[]).every((m) => m.role !== "system")).toBe(true);

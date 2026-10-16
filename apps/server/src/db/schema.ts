@@ -1,6 +1,6 @@
 import type { ChatParams, FinishReason, ImageParams, MessageStatus, Part, PlanItem, ProfilePatch, RawTurn, ThreadHarness, Usage } from "@ezclaw/core";
 import { MESSAGE_STATUSES, MODES } from "@ezclaw/core";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /** Key/value app settings. Each value is validated against its key's schema on read. */
 export const settings = sqliteTable("settings", {
@@ -169,4 +169,42 @@ export const assets = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => [index("assets_sha_idx").on(t.sha256)],
+);
+
+/** Things to remember across threads. Models can only add proposals; the owner approves them. */
+export const memories = sqliteTable(
+  "memories",
+  {
+    id: text("id").primaryKey(),
+    text: text("text").notNull(),
+    scope: text("scope", { enum: ["global", "workspace"] }).notNull(),
+    workspace: text("workspace"),
+    status: text("status", { enum: ["active", "proposed"] }).notNull(),
+    source: text("source", { enum: ["user", "agent"] }).notNull(),
+    threadId: text("thread_id").references(() => threads.id, { onDelete: "set null" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("memories_status_idx").on(t.status)],
+);
+
+/**
+ * The content of a file just before an agent run first changed it, so the run can be undone.
+ * One row per file per run; `existed` false means the run created the file.
+ */
+export const fileSnapshots = sqliteTable(
+  "file_snapshots",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    /** The user message that started the run. */
+    runMessageId: text("run_message_id").notNull(),
+    path: text("path").notNull(),
+    existed: integer("existed", { mode: "boolean" }).notNull(),
+    content: blob("content", { mode: "buffer" }),
+    restoredAt: integer("restored_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("file_snapshots_run_path_idx").on(t.runMessageId, t.path), index("file_snapshots_thread_idx").on(t.threadId)],
 );

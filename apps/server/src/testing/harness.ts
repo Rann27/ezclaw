@@ -41,7 +41,7 @@ export function createTestContext(env: Record<string, string> = {}): TestContext
   const ctx = { tmp, config, secrets } as TestContext;
   const build = () => {
     ctx.opened = openDatabase({ file: join(tmp, "ezclaw.db"), migrationsDir: config.migrationsDir });
-    ctx.services = createServices({ db: ctx.opened.db, secrets, assetsDir: join(ctx.tmp, "assets"), imagePollMs: 5 });
+    ctx.services = createServices({ db: ctx.opened.db, secrets, assetsDir: join(ctx.tmp, "assets"), imagePollMs: 5, allowPrivateWeb: true, skillsDir: join(ctx.tmp, "skills") });
     ctx.app = createApp({ config, db: ctx.opened.db, dbPath: ctx.opened.file, startedAt: new Date(), services: ctx.services });
   };
   build();

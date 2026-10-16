@@ -1,10 +1,12 @@
-import { MODEL_ROLES, MODEL_ROLE_LABELS, type HealthResponse, type ModelDto, type ModelRole } from "@ezclaw/core";
+import { MODEL_ROLES, MODEL_ROLE_LABELS, WEB_SEARCH_LABELS, WEB_SEARCH_PROVIDERS, type HealthResponse, type ModelDto, type ModelRole, type WebSearchProvider, type WebSearchStatus } from "@ezclaw/core";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useId, useState, type ReactNode } from "react";
+import { FolderPicker } from "../../components/agent/FolderPicker";
 import { api } from "../../api";
 import { ThemeSwitch } from "../../components/ThemeSwitch";
-import { modelLabel, useModels, useSettings, useUpdateSettings } from "../../lib/queries";
+import { keys, modelLabel, useModels, useSettings, useUpdateSettings, useWebSearch } from "../../lib/queries";
 import { useTheme } from "../../theme";
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -24,10 +26,10 @@ function formatStarted(iso: string): string {
 
 const ROLE_NOTE: Record<ModelRole, string> = {
   chat: "Dipakai untuk thread Chat baru.",
-  agent: "Dipakai mulai M2.",
-  image: "Dipakai mulai M3.",
-  edit: "Dipakai mulai M4.",
-  composer: "Menyusun prompt gambar, mulai M3.",
+  agent: "Dipakai untuk tugas Agent baru.",
+  image: "Dipakai untuk thread Image baru.",
+  edit: "Dipakai untuk Edit baru; kosong berarti ikut model Image.",
+  composer: "Menyusun prompt gambar dan merapikan prompt edit.",
   title: "Judul dan ringkasan thread, mulai M2.",
 };
 
@@ -209,6 +211,14 @@ export function GeneralPage() {
         )}
       </Section>
 
+      <Section id="settings-web" title="Pencarian web untuk Agent">
+        <WebSearchSettings />
+      </Section>
+
+      <Section id="settings-skills" title="Folder skill">
+        <SkillFolders />
+      </Section>
+
       <Section id="settings-server" title="Server lokal">
         <ServerStatus />
       </Section>
@@ -221,6 +231,132 @@ export function GeneralPage() {
           <li>API key tidak disimpan di database dan tidak pernah dikirim kembali ke browser. Catatan request menyembunyikan header kunci.</li>
         </ul>
       </Section>
+    </div>
+  );
+}
+
+const SEARCH_LINKS: Record<WebSearchProvider, string> = {
+  brave: "https://api-dashboard.search.brave.com",
+  tavily: "https://app.tavily.com",
+  exa: "https://dashboard.exa.ai",
+};
+
+function WebSearchSettings() {
+  const status = useWebSearch();
+  const qc = useQueryClient();
+  const id = useId();
+  const [provider, setProvider] = useState<WebSearchProvider>("brave");
+  const [key, setKey] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const call = async (fn: () => Promise<WebSearchStatus>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      qc.setQueryData(keys.webSearch, await fn());
+      setKey("");
+      void qc.invalidateQueries({ queryKey: keys.settings });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyimpan.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-3">
+      <p className="max-w-prose text-dense text-fg-3">
+        Tool <code>web_search</code> butuh layanan pencarian dengan API key-mu sendiri. Key disimpan di penyimpanan kredensial komputer ini. Tanpa ini, Agent tetap bisa membaca halaman yang alamatnya sudah diketahui lewat <code>web_fetch</code>.
+      </p>
+      {status.data?.provider && status.data.hasKey ? (
+        <div className="flex flex-wrap items-center gap-2 text-dense">
+          <span>
+            Aktif: <strong>{WEB_SEARCH_LABELS[status.data.provider]}</strong>
+          </span>
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void call(() => api<WebSearchStatus>("/websearch/key", { method: "DELETE" }))}>
+            Hapus key dan matikan
+          </button>
+        </div>
+      ) : (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void call(() => api<WebSearchStatus>("/websearch/key", { method: "PUT", body: JSON.stringify({ provider, key }) }));
+          }}
+        >
+          <div className="grid gap-1">
+            <label htmlFor={`${id}-p`} className="text-dense font-semibold">
+              Layanan
+            </label>
+            <select id={`${id}-p`} className="select w-auto" value={provider} onChange={(e) => setProvider(e.target.value as WebSearchProvider)}>
+              {WEB_SEARCH_PROVIDERS.map((p) => (
+                <option key={p} value={p}>
+                  {WEB_SEARCH_LABELS[p]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid min-w-60 flex-1 gap-1">
+            <label htmlFor={`${id}-k`} className="text-dense font-semibold">
+              API key
+            </label>
+            <input id={`${id}-k`} className="input font-code" type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={busy || key.trim().length < 8}>
+            Simpan
+          </button>
+          <a className="text-dense text-brand-text underline" href={SEARCH_LINKS[provider]} target="_blank" rel="noreferrer noopener">
+            Ambil key {WEB_SEARCH_LABELS[provider]}
+          </a>
+        </form>
+      )}
+      {error && (
+        <p className="rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SkillFolders() {
+  const settings = useSettings();
+  const update = useUpdateSettings();
+  const [picking, setPicking] = useState(false);
+  const dirs = settings.data?.skillDirs ?? [];
+  return (
+    <div className="grid gap-3">
+      <p className="max-w-prose text-dense text-fg-3">
+        Skill adalah folder berisi <code>SKILL.md</code> (instruksi untuk tugas tertentu). Agent melihat daftar skill dan membacanya saat relevan. EZClaw selalu memeriksa folder <code>.ezclaw/skills</code>, <code>.agents/skills</code>, dan <code>.claude/skills</code> di workspace, serta folder <code>skills</code> di data EZClaw. Tambahkan folder lain di sini, misalnya kumpulan skill yang sudah kamu punya.
+      </p>
+      {dirs.length > 0 && (
+        <ul className="grid gap-1">
+          {dirs.map((d) => (
+            <li key={d} className="flex items-center gap-2 text-dense">
+              <code className="min-w-0 flex-1 break-all">{d}</code>
+              <button type="button" className="btn btn-ghost min-h-8" onClick={() => update.mutate({ skillDirs: dirs.filter((x) => x !== d) })}>
+                Hapus
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button type="button" className="btn btn-secondary justify-self-start" disabled={dirs.length >= 10} onClick={() => setPicking(true)}>
+        Tambah folder skill
+      </button>
+      <FolderPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        initial={null}
+        recent={[]}
+        title="Folder yang berisi skill"
+        onPick={(p) => {
+          setPicking(false);
+          if (!dirs.includes(p)) update.mutate({ skillDirs: [...dirs, p] });
+        }}
+      />
     </div>
   );
 }

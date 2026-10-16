@@ -12,17 +12,29 @@ import {
   type ThreadHarness,
   type Usage,
 } from "@ezclaw/core";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { readFileSync, statSync } from "node:fs";
 import type { Db } from "../db/client.js";
-import { threads } from "../db/schema.js";
+import { fileSnapshots, threads } from "../db/schema.js";
+import type { AssetService } from "../services/assets.js";
+import type { MemoryService } from "../services/memory.js";
+import type { SecretStore } from "../secrets.js";
+import { getSettings } from "../settings.js";
+import { randomUUID } from "node:crypto";
 import { callModel, newAccumulator, type ModelCallDeps, type TurnAccumulator } from "../provider/call.js";
 import { ProviderError } from "../provider/http.js";
 import { decide, type ApprovalRules } from "./approvals.js";
-import { loadProjectInstructions, renderSystemPrompt, type HarnessService } from "./harness.js";
+import { loadProjectInstructions, renderPrompt, withHarnessMessages, type HarnessService, type RenderedPrompt } from "./harness.js";
 import { defaultShell, type ShellKind } from "./shell.js";
 import { insertMessage, loadHistoryEntries, touchThread, updateMessage, type HistoryEntry } from "./store.js";
-import { clipOutput, selectTools, ToolArgError, type ToolEnv, type ToolImpl } from "./tools.js";
+import { selectTools } from "./toolRegistry.js";
+import { clipOutput, ToolArgError, type ToolEnv, type ToolImpl } from "./tools.js";
 import { Workspace } from "./workspace.js";
+import type { ProcessManager } from "./processes.js";
+import { discoverSkills, skillListing } from "./skills.js";
+import { runSubagent } from "./subagent.js";
+import type { ToolExtras } from "./toolsExtra.js";
+import { fetchPage, searchWeb } from "./web.js";
 
 /** What the loop needs from the run it belongs to. */
 export interface RunHandle {
@@ -36,7 +48,15 @@ export interface RunHandle {
 export interface AgentDeps extends ModelCallDeps {
   rules: ApprovalRules;
   harness: HarnessService;
+  memory: MemoryService;
+  assets: AssetService;
+  processes: ProcessManager;
+  secrets: SecretStore;
+  /** EZClaw's own skills folder. */
+  skillsDir: string;
   codexDir: () => string | null;
+  /** Tests only: let web_fetch reach the local mock server. */
+  allowPrivateWeb?: boolean;
 }
 
 export interface AgentRunInput {
@@ -48,6 +68,8 @@ export interface AgentRunInput {
   harness: ThreadHarness;
   /** The thread's own system prompt. */
   userPrompt: string;
+  /** The user message that started this run; file snapshots for undo are filed under it. */
+  runMessageId: string;
 }
 
 export interface AgentResult {
@@ -58,6 +80,34 @@ export interface AgentResult {
 }
 
 const RESERVED_FOR_REPLY = 0.1;
+const MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024;
+/** Only the most recent images are sent again; older ones would mostly cost tokens. */
+const MAX_IMAGES_IN_CONTEXT = 4;
+
+/** Fills in the bytes of the last few images in the history and drops older ones. */
+function withImageData(history: CanonicalMessage[], assets: AssetService): CanonicalMessage[] {
+  let budget = MAX_IMAGES_IN_CONTEXT;
+  const out = [...history];
+  for (let i = out.length - 1; i >= 0; i--) {
+    const m = out[i]!;
+    if (!m.parts.some((p) => p.type === "image")) continue;
+    out[i] = {
+      ...m,
+      parts: m.parts.flatMap((p): Part[] => {
+        if (p.type !== "image") return [p];
+        if (budget <= 0) return [];
+        try {
+          const { bytes, mime } = assets.read(p.assetId);
+          budget--;
+          return [{ ...p, dataUrl: `data:${mime};base64,${bytes.toString("base64")}` }];
+        } catch {
+          return [];
+        }
+      }),
+    };
+  }
+  return out;
+}
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
@@ -102,12 +152,16 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
   const harnessOn = input.harness.on;
   const loop: AgentLoopConfig = harnessOn ? profile.loop : { ...DEFAULT_LOOP };
   const toolNames = harnessOn ? profile.tools : input.harness.tools;
-  const tools = selectTools(toolNames, shell);
+  const tools = selectTools(toolNames, shell, harnessOn ? profile.toolStyle : "ezclaw");
   const toolMap = new Map(tools.map((t) => [t.name, t]));
 
+  const settings = getSettings(db);
+  const skills = toolNames.includes("read_skill") ? discoverSkills(ws.root, deps.skillsDir, settings.skillDirs) : [];
+
   let system: string | undefined;
+  let extraMessages: Pick<RenderedPrompt, "developer" | "context"> = { developer: [], context: "" };
   if (harnessOn) {
-    system = renderSystemPrompt(
+    const rendered = renderPrompt(
       profile,
       {
         date: new Date().toLocaleDateString("sv-SE"),
@@ -118,12 +172,69 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
         modelId: model.row.modelId,
         userPrompt: input.userPrompt,
         codexDir: deps.codexDir(),
+        memories: deps.memory.forPrompt(ws.root),
+        skills: skillListing(skills),
       },
       loadProjectInstructions(ws.root, profile.projectInstructions),
     );
+    system = rendered.text;
+    extraMessages = rendered;
   } else {
-    system = input.userPrompt.trim() || undefined;
+    system = [input.userPrompt.trim(), skills.length ? skillListing(skills) : ""].filter(Boolean).join("\n\n") || undefined;
   }
+
+  /* ---- what the newer tools need */
+  const snapshotted = new Set<string>(
+    db
+      .select({ path: fileSnapshots.path })
+      .from(fileSnapshots)
+      .where(and(eq(fileSnapshots.threadId, input.threadId), eq(fileSnapshots.runMessageId, input.runMessageId)))
+      .all()
+      .map((r) => r.path),
+  );
+  const beforeWrite = (abs: string) => {
+    if (snapshotted.has(abs)) return;
+    snapshotted.add(abs);
+    let existed = false;
+    let content: Buffer | null = null;
+    try {
+      const st = statSync(abs);
+      if (st.isFile()) {
+        existed = true;
+        // Very large files are not kept; undo then cannot restore them and says so.
+        content = st.size <= MAX_SNAPSHOT_BYTES ? readFileSync(abs) : null;
+      }
+    } catch {
+      existed = false;
+    }
+    db.insert(fileSnapshots)
+      .values({ id: randomUUID(), threadId: input.threadId, runMessageId: input.runMessageId, path: abs, existed, content, createdAt: new Date() })
+      .onConflictDoNothing()
+      .run();
+    run.emit({ type: "checkpoint", files: snapshotted.size });
+  };
+  let pendingImages: { assetId: string; display: string }[] = [];
+  const searchKey = settings.webSearchProvider ? deps.secrets.get(`websearch:${settings.webSearchProvider}`) : null;
+  const extrasBase: Omit<ToolExtras, "subagent"> = {
+    threadId: input.threadId,
+    processes: deps.processes,
+    skills,
+    modelSeesImages: modelProfile.inputModalities.includes("image"),
+    attachImage: (abs, display) => {
+      const asset = deps.assets.save(readFileSync(abs), "upload");
+      pendingImages.push({ assetId: asset.id, display });
+      return { width: asset.width, height: asset.height };
+    },
+    proposeMemory: (text, scope) => {
+      const m = deps.memory.create({ text, scope, workspace: ws.root, source: "agent", status: "proposed", threadId: input.threadId });
+      run.emit({ type: "memory_proposed", memoryId: m.id, text: m.text, scope: m.scope });
+    },
+    fetchPage: (url, signal) => fetchPage(url, signal, deps.fetchImpl, { allowPrivate: deps.allowPrivateWeb === true }),
+    search:
+      settings.webSearchProvider && searchKey
+        ? (query, count, signal) => searchWeb(settings.webSearchProvider!, searchKey, query, count, signal, deps.fetchImpl)
+        : "Pencarian web belum diatur. Minta pengguna memilih layanan pencarian dan mengisi key-nya di Settings, bagian Umum. Sementara itu, pakai web_fetch untuk alamat yang sudah diketahui.",
+  };
 
   if (tools.length && !modelProfile.tools) {
     run.emit({ type: "note", text: "Profil model ini belum menyatakan dukungan tools. Agent tetap mencoba; jika provider menolak, atur lewat Profil model." });
@@ -169,7 +280,7 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
     }
 
     /* ---- ask the model */
-    const history = entries.map((e) => e.message);
+    const history = withHarnessMessages(withImageData(entries.map((e) => e.message), deps.assets), extraMessages, harnessOn ? profile.userTag : null);
     const acc = newAccumulator();
     let failure: unknown = null;
     try {
@@ -228,9 +339,26 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
     /* ---- run the tools it asked for */
     for (const c of calls) run.emit({ type: "tool_call", callId: c.callId, name: c.name, args: c.args, ...(c.argsError ? { argsError: c.argsError } : {}) });
 
-    const baseEnv = { workspace: ws, config: loop, shell, signal: run.signal, setPlan };
-    const results = await executeCalls(deps, run, input, baseEnv, toolMap, calls, loop);
-    insertMessage(db, { threadId: input.threadId, role: "tool", parts: results, status: "complete" });
+    const baseEnv = { workspace: ws, config: loop, shell, signal: run.signal, setPlan, beforeWrite };
+    const extras: ToolExtras = {
+      ...extrasBase,
+      subagent: (task, signal) =>
+        runSubagent(deps, { ...run, signal }, {
+          modelRowId: input.modelRowId,
+          params: input.params,
+          approvalMode: input.approvalMode,
+          workspace: input.workspace,
+          task,
+          logMessageId: placeholder.id,
+          baseEnv: { workspace: ws, config: loop, shell, signal, setPlan },
+          extras: extrasBase,
+        }),
+    };
+    const results = await executeCalls(deps, run, input, { ...baseEnv, ext: extras }, toolMap, calls, loop);
+    // Images a tool attached ride along on the tool message; the wire adapters show them to the model.
+    const imageParts: Part[] = pendingImages.map((i) => ({ type: "image", assetId: i.assetId, role: i.display }));
+    pendingImages = [];
+    insertMessage(db, { threadId: input.threadId, role: "tool", parts: [...results, ...imageParts], status: "complete" });
     sinceLastCall = estimateTokens("x".repeat(results.reduce((n, r) => n + (r.type === "tool_result" ? r.output.length : 0), 0)));
 
     if (run.signal.aborted) return { status: "stopped", finishReason };
@@ -331,10 +459,16 @@ async function executeCalls(
   return calls.map((c) => results.get(c.callId)!);
 }
 
-const SUMMARY_SYSTEM = `You compress a long working session between a user and a coding agent so the agent can continue it with less context. Write a faithful summary in the language the user used. Include: the user's goal and constraints, decisions made, files created or changed (paths), commands run and their important results, errors found and how they were fixed, the current state, and what remains to do. Keep exact names, paths, and numbers. Do not invent anything. Do not address the user.`;
+const SUMMARY_SYSTEM = `You compress a long conversation or working session between a user and an AI assistant so it can continue with less context. Write a faithful summary in the language the user used. Include: the user's goal and constraints, decisions made, files created or changed (paths), commands run and their important results, errors found and how they were fixed, the current state, and what remains to do. Keep exact names, paths, and numbers. Do not invent anything. Do not address the user.`;
 
 /** Replaces the oldest part of the conversation with a model-written summary. Returns false if it could not. */
-async function compactHistory(deps: AgentDeps, run: RunHandle, input: AgentRunInput, entries: HistoryEntry[], logMessageId: string): Promise<boolean> {
+export async function compactHistory(
+  deps: ModelCallDeps,
+  run: Pick<RunHandle, "signal" | "emit">,
+  input: { threadId: string; modelRowId: string },
+  entries: HistoryEntry[],
+  logMessageId: string,
+): Promise<boolean> {
   const { db } = deps;
   // Keep the latest few messages as they are; never start the kept part on a tool result.
   let cut = Math.max(1, entries.length - 6);

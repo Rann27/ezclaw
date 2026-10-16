@@ -12,7 +12,7 @@ export type Part =
   | { type: "tool_call"; callId: string; name: string; args: unknown; /** Set when the model's arguments were not valid JSON. */ argsError?: string }
   | { type: "tool_result"; callId: string; name: string; output: string; isError?: boolean; denied?: boolean }
   /** A stored image (an asset), uploaded as a reference or produced by an image model. */
-  | { type: "image"; assetId: string; role?: string; seed?: number };
+  | { type: "image"; assetId: string; role?: string; seed?: number; /** Filled in just before sending; never stored. */ dataUrl?: string };
 
 /**
  * The assistant turn exactly as the provider produced it, in that protocol's own format.
@@ -25,7 +25,8 @@ export interface RawTurn {
 }
 
 export interface CanonicalMessage {
-  role: "user" | "assistant" | "tool";
+  /** "developer" messages are built per request from the harness and never stored. */
+  role: "user" | "assistant" | "tool" | "developer";
   parts: Part[];
   raw?: RawTurn;
 }

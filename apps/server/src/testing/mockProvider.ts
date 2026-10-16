@@ -87,6 +87,15 @@ export async function startMockProvider(port = 0): Promise<MockProvider> {
     const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     if (handleImageRoute({ req, res, path, body, raw, origin })) return;
 
+    if (req.method === "GET" && path === "/page.html") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      return res.end('<html><head><title>Dokumen Uji</title><script>alert(1)</script></head><body><nav>menu</nav><h1>Panduan &amp; Contoh</h1><p>Paragraf <b>penting</b> di sini.</p><ul><li>satu</li><li>dua</li></ul></body></html>');
+    }
+    if (req.method === "GET" && path === "/redirect") {
+      res.writeHead(302, { location: "/page.html" });
+      return res.end();
+    }
+
     if (req.method === "GET" && path === "/v1/models") {
       return json(200, { object: "list", data: [{ id: "echo" }, { id: "think" }, { id: "tags" }, { id: "reject-top_p" }, { id: "slow" }, { id: "midfail" }, { id: "markdown" }, { id: "composer-json" }, ...Object.keys(SCRIPTS).map((id) => ({ id }))] });
     }

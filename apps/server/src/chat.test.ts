@@ -18,6 +18,9 @@ afterEach(async () => {
   await ctx.dispose();
 });
 
+/** Wire-level tests run without the chat wrapper, so bodies hold only what the test sets. */
+const RAW = { on: false, profileId: "ezclaw-chat", tools: [] };
+
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 const put = (body: unknown) => ({ method: "PUT", body: JSON.stringify(body) });
 const patch = (body: unknown) => ({ method: "PATCH", body: JSON.stringify(body) });
@@ -49,7 +52,7 @@ async function setup(modelId: string, endpointOverrides: Record<string, unknown>
   const endpoint = await addEndpoint(endpointOverrides);
   await ctx.json(`/api/endpoints/${endpoint.id}/models`, post({ modelId }));
   const model = await modelRow(endpoint, modelId);
-  const thread = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat" }));
+  const thread = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat", harness: RAW }));
   return { endpoint, model, thread };
 }
 
@@ -332,7 +335,7 @@ describe("provider failures", () => {
     const endpoint = await addEndpoint({}, null);
     await ctx.json(`/api/endpoints/${endpoint.id}/models`, post({ modelId: "echo" }));
     const model = await modelRow(endpoint, "echo");
-    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat" }));
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat", harness: RAW }));
     const res = await ctx.req(`/api/threads/${t.id}/messages`, post({ text: "x", modelId: model.id }));
     expect(res.status).toBe(400);
     expect(((await res.json()) as any).error.code).toBe("key_missing");
@@ -403,7 +406,7 @@ describe("anthropic protocol", () => {
     );
     await ctx.json(`/api/endpoints/${endpoint.id}/test`, post({}));
     const model = await modelRow(endpoint, "claude-sonnet-5-5");
-    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat" }));
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat", harness: RAW }));
     const sent = await send(t.id, model.id, "halo", { systemPrompt: "Singkat.", params: { reasoning: { mode: "on", effort: "low" }, stop: ["STOP"] } });
     await collectRun(ctx, sent.runId);
 
@@ -437,7 +440,7 @@ describe("anthropic protocol", () => {
 
 describe("thread management", () => {
   it("renames, pins, archives, and deletes threads", async () => {
-    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat" }));
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat", harness: RAW }));
     expect(t.title).toBe("Percakapan baru");
     expect(await ctx.json<ThreadDetailDto>(`/api/threads/${t.id}`, patch({ title: "Riset", pinned: true }))).toMatchObject({ title: "Riset", pinned: true });
     const list = await ctx.json<{ threads: { id: string }[] }>("/api/threads?mode=chat");
@@ -451,13 +454,27 @@ describe("thread management", () => {
   it("starts new threads on the default chat model from settings", async () => {
     const { model } = await setup("echo");
     await ctx.json("/api/settings", put({ defaultModels: { chat: model.id } }));
-    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat" }));
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat", harness: RAW }));
     expect(t.modelId).toBe(model.id);
   });
 
   it("validates params saved on a thread", async () => {
-    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat" }));
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat", harness: RAW }));
     expect((await ctx.req(`/api/threads/${t.id}`, patch({ params: { temperature: "hot" } }))).status).toBe(400);
     expect((await ctx.req(`/api/threads/${t.id}`, patch({ params: { nonsense: 1 } }))).status).toBe(400);
+  });
+});
+
+describe("chat wrapper", () => {
+  it("a new chat thread uses the EZClaw Chat wrapper, with the date last so the start can be cached", async () => {
+    const { model } = await setup("echo");
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "chat" }));
+    expect(t.harness).toMatchObject({ on: true, profileId: "ezclaw-chat" });
+    mock.requests.length = 0;
+    await collectRun(ctx, (await send(t.id, model.id, "hai", { systemPrompt: "Panggil aku Ran." })).runId);
+    const system = String((mock.requests.at(-1)!.body!.messages as { role: string; content: string }[])[0]!.content);
+    expect(system.startsWith("You are a helpful assistant in EZClaw")).toBe(true);
+    expect(system).toContain("Panggil aku Ran.");
+    expect(system.indexOf("Date:")).toBeGreaterThan(system.indexOf("Panggil aku Ran."));
   });
 });

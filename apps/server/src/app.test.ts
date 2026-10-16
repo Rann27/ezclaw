@@ -72,7 +72,7 @@ describe("api", () => {
   });
 
   it("returns default settings, persists a theme change, and keeps it after restart", async () => {
-    expect(await ctx.json("/api/settings")).toEqual({ theme: "system", defaultModels: {}, autoRetryRejectedParams: true, codexDir: null });
+    expect(await ctx.json("/api/settings")).toEqual({ theme: "system", defaultModels: {}, autoRetryRejectedParams: true, codexDir: null, webSearchProvider: null, skillDirs: [] });
 
     const put = await req("/api/settings", { method: "PUT", body: JSON.stringify({ theme: "dark" }) });
     expect(put.status).toBe(200);

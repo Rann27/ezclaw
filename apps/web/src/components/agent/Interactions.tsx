@@ -7,6 +7,7 @@ const KIND_LABEL: Record<ApprovalRequest["kind"], string> = {
   write: "Tulis file",
   edit: "Ubah file",
   outside: "Di luar workspace",
+  web: "Akses internet",
 };
 
 /** A unified diff with additions and removals marked by more than colour alone. */

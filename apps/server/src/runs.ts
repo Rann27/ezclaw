@@ -10,7 +10,8 @@ import type {
   RunStopReason,
   ThreadHarness,
 } from "@ezclaw/core";
-import { runAgent, type RunHandle } from "./agent/loop.js";
+import { compactHistory, runAgent, type RunHandle } from "./agent/loop.js";
+import { loadHistoryEntries } from "./agent/store.js";
 import { touchThread, updateMessage } from "./agent/store.js";
 import type { Db } from "./db/client.js";
 import { runImage, type ImageRunDeps, type ImageRunInput, type ImageRunResult } from "./imageRun.js";
@@ -18,6 +19,8 @@ import { callModel, newAccumulator, type TurnAccumulator } from "./provider/call
 import { ProviderError } from "./provider/http.js";
 
 const KEEP_FINISHED_RUN_MS = 5 * 60_000;
+/** Share of the context window at which a chat thread is compacted. */
+const CHAT_COMPACT_AT = 0.8;
 
 export interface ChatRunInput {
   threadId: string;
@@ -143,6 +146,7 @@ export class RunManager {
 
   /** Aborts every running response and waits until each partial answer is saved. Used on shutdown. */
   async stopAll(): Promise<void> {
+    this.agent.processes.stopAll();
     const pending = [...this.runs.values()].filter((r) => !r.done);
     for (const run of pending) this.stop(run.id);
     await Promise.allSettled(pending.map((r) => r.finished));
@@ -226,13 +230,14 @@ export class RunManager {
     let errorMessage: string | null = null;
 
     try {
+      const history = await this.fitChatHistory(run, input);
       await callModel(
         this.agent,
         {
           modelRowId: input.modelRowId,
           params: input.params,
           system: input.system,
-          messages: input.history,
+          messages: history,
           logMessageId: input.assistantMessageId,
           signal: run.abort.signal,
           onText: (delta) => this.emit(run, { type: "text", delta }),
@@ -290,6 +295,21 @@ export class RunManager {
     this.finish(run);
   }
 
+  /**
+   * Chat keeps the whole conversation, so a long thread would eventually overflow the model's window.
+   * When it gets close, the oldest part is replaced by a summary (the same compaction Agent uses).
+   */
+  private async fitChatHistory(run: ActiveRun, input: ChatRunInput): Promise<CanonicalMessage[]> {
+    const window = this.agent.registry.resolveModel(input.modelRowId).resolved.profile.contextLength;
+    if (!window) return input.history;
+    const chars = input.history.reduce((n, m) => n + m.parts.reduce((k, p) => k + (p.type === "text" || p.type === "reasoning" ? p.text.length : 0), 0), 0) + (input.system?.length ?? 0);
+    if (chars / 3.5 < window * CHAT_COMPACT_AT || input.history.length <= 6) return input.history;
+    const entries = loadHistoryEntries(this.db, input.threadId);
+    const handle = { signal: run.abort.signal, emit: (e: RunEvent) => this.emit(run, e) };
+    if (!(await compactHistory(this.agent, handle, { threadId: input.threadId, modelRowId: input.modelRowId }, entries, input.assistantMessageId))) return input.history;
+    return loadHistoryEntries(this.db, input.threadId).map((e) => e.message);
+  }
+
   private async executeAgent(run: ActiveRun, input: AgentRunStart) {
     let status: "complete" | "stopped" | "error" = "complete";
     let error: string | undefined;
@@ -305,6 +325,7 @@ export class RunManager {
         workspace: input.workspace,
         harness: input.harness,
         userPrompt: input.userPrompt,
+        runMessageId: input.startMessageId,
       });
       status = result.status;
       error = result.error;

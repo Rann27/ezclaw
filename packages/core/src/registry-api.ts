@@ -320,3 +320,27 @@ export interface WorkspaceCheckResponse {
 export interface RecentWorkspacesResponse {
   workspaces: string[];
 }
+
+/** One level of the folder picker: the folders inside `path`. Files are never listed. */
+export interface DirListResponse {
+  /** The folder shown, as it resolves on disk; null for the list of drives. */
+  path: string | null;
+  /** One level up; null at a drive root or at the drive list. */
+  parent: string | null;
+  entries: { name: string; path: string; hidden: boolean }[];
+  /** Drives (Windows) or "/" elsewhere, for jumping between them. */
+  roots: string[];
+  home: string;
+  /** Set when the folder has more entries than were returned. */
+  truncated: boolean;
+}
+
+export const mkdirSchema = z.object({
+  parent: z.string().trim().min(1).max(1000),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Nama folder kosong.")
+    .max(120)
+    .refine((n) => !/[\\/:*?"<>|]/.test(n) && n !== "." && n !== "..", 'Nama folder tidak boleh berisi \\ / : * ? " < > |.'),
+});

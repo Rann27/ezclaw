@@ -148,6 +148,11 @@ export const capabilityProfileSchema = z.object({
   extras: z.array(extraParamSchema),
   /** Present for image models: which wire to use and what it accepts. Facts here refine the wire's defaults. */
   image: imageSpecPatchSchema.optional(),
+  /**
+   * Mark the prompt for provider-side caching (Anthropic cache_control, also passed through by OpenRouter
+   * for Claude models). Cached input is billed at a fraction of the normal price on later requests.
+   */
+  promptCache: z.boolean().default(false),
   /** Fields always sent for this model unless a param or the extra body overrides them (e.g. MiniMax reasoning_split). */
   bodyDefaults: z.record(z.string(), z.unknown()),
   notes: z.array(z.string()),

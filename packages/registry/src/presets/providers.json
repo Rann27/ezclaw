@@ -175,6 +175,16 @@
       }
     },
     {
+      "endpoint": "openrouter",
+      "model": "^anthropic/",
+      "patch": {
+        "promptCache": true,
+        "notes": [
+          "Prompt ditandai cache_control supaya OpenRouter meneruskan prompt caching ke Claude: input yang sama dibayar lebih murah pada request berikutnya."
+        ]
+      }
+    },
+    {
       "endpoint": "venice",
       "model": ".*",
       "patch": {
