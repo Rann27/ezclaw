@@ -14,7 +14,7 @@ import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
 import { Composer } from "../components/chat/Composer";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
-import { keys, useCheckpoints, useEndpoints, useModels, useRecentWorkspaces, useSettings, useThread } from "../lib/queries";
+import { canAgent, keys, useCheckpoints, useEndpoints, useModels, useRecentWorkspaces, useSettings, useThread } from "../lib/queries";
 
 const LAST_MODEL_KEY = "ezclaw.lastAgentModel";
 const LAST_WORKSPACE_KEY = "ezclaw.lastWorkspace";
@@ -111,7 +111,7 @@ export function AgentPage() {
   const modelList = models.data?.models;
   const chosen: ModelDto | null = useMemo(() => {
     if (!modelList) return null;
-    const textModels = modelList.filter((m) => m.kind !== "image");
+    const textModels = modelList.filter(canAgent);
     const byId = (id: string | null | undefined) => textModels.find((m) => m.id === id) ?? null;
     return byId(draft.modelId) ?? (userEdited.current ? null : (byId(settings.data?.defaultModels.agent) ?? byId(stored(LAST_MODEL_KEY))));
   }, [modelList, draft.modelId, settings.data?.defaultModels.agent]);
@@ -168,7 +168,7 @@ export function AgentPage() {
         let id = threadId;
         if (!id) {
           if (!workspaceText.trim()) throw new Error("Isi folder workspace dulu.");
-          const created = await api<ThreadDetailDto>("/threads", { method: "POST", body: JSON.stringify({ mode: "agent", workspace: workspaceText.trim(), modelId, harness: pendingHarness, approvalMode: pendingMode }) });
+          const created = await api<ThreadDetailDto>("/threads", { method: "POST", body: JSON.stringify({ mode: "agent", workspace: workspaceText.trim(), modelId, harness: pendingHarness, approvalMode: pendingMode, ...(pendingMode === "full" ? { confirmFull: true } : {}) }) });
           id = created.id;
           try {
             localStorage.setItem(LAST_WORKSPACE_KEY, workspaceText.trim());
@@ -256,8 +256,7 @@ export function AgentPage() {
           type="button"
           role="radio"
           aria-checked={approvalMode === mode}
-          disabled={running || (mode === "full" && !threadId)}
-          title={mode === "full" && !threadId ? "Bisa dinyalakan setelah thread dibuat" : undefined}
+          disabled={running}
           onClick={() => changeMode(mode)}
         >
           {APPROVAL_MODE_LABELS[mode]}
@@ -302,7 +301,7 @@ export function AgentPage() {
         </ThreadHeader>
 
         <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto grid w-full max-w-[calc(var(--read-max)+3rem)] gap-6 px-4 py-6">
+          <div className="mx-auto grid w-full max-w-[72rem] gap-6 px-4 py-6">
             {threadId && thread.isPending && (
               <p className="flex items-center gap-2 text-ui text-fg-2" role="status">
                 <span className="node node-run" aria-hidden />
@@ -372,7 +371,7 @@ export function AgentPage() {
         </div>
 
         {pendingCount > 0 && (
-          <div className="mx-auto w-full max-w-[calc(var(--read-max)+3rem)] px-4 pb-2">
+          <div className="mx-auto w-full max-w-[72rem] px-4 pb-2">
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-md bg-ember-soft px-4 py-2 text-left text-ui text-ember-text"
@@ -386,6 +385,7 @@ export function AgentPage() {
         )}
 
         <Composer
+          wide
           model={chosen}
           onPickModel={() => setPickerOpen(true)}
           running={running}
@@ -417,7 +417,7 @@ export function AgentPage() {
         </Dialog>
       )}
 
-      <ModelPickerDialog open={pickerOpen} onClose={() => { setPickerOpen(false); setFocusSignal((n) => n + 1); }} selectedId={chosen?.id ?? null} onSelect={(m) => update({ modelId: m.id })} />
+      <ModelPickerDialog accept={canAgent} open={pickerOpen} onClose={() => { setPickerOpen(false); setFocusSignal((n) => n + 1); }} selectedId={chosen?.id ?? null} onSelect={(m) => update({ modelId: m.id })} />
       <ProfileDialog modelId={profileFor} onClose={() => setProfileFor(null)} />
       <RequestLogDialog messageId={logFor} onClose={() => setLogFor(null)} />
 
@@ -508,7 +508,9 @@ export function AgentPage() {
               className="btn btn-danger"
               onClick={() => {
                 setConfirmFull(false);
-                void patchThread({ approvalMode: "full", confirmFull: true });
+                // Before the first message there is no thread yet: the choice goes along when it is created.
+                if (threadId) void patchThread({ approvalMode: "full", confirmFull: true });
+                else setPendingMode("full");
               }}
             >
               Nyalakan Otomatis penuh
@@ -518,7 +520,7 @@ export function AgentPage() {
       >
         <div className="grid gap-3 text-body text-fg-2">
           <p>
-            Agent akan menulis file dan menjalankan perintah di dalam <code className="break-all">{thread.data?.workspace}</code> tanpa bertanya.
+            Agent akan menulis file dan menjalankan perintah di dalam <code className="break-all">{thread.data?.workspace ?? (workspaceText.trim() || "folder workspace")}</code> tanpa bertanya.
           </p>
           <p>Perintah berisiko (menghapus rekursif, git push --force, dan sejenisnya) dan menulis file di luar workspace tetap meminta izin.</p>
           <p>EZClaw tidak memakai sandbox sistem operasi di Windows, jadi perlindungannya hanya dari daftar di atas dan batas folder.</p>

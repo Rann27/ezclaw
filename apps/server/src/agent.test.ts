@@ -209,6 +209,12 @@ describe("permissions", () => {
     const { model, thread } = await setup("agent-shell");
     const unconfirmed = await ctx.req(`/api/threads/${thread.id}`, patch({ approvalMode: "full" }));
     expect(unconfirmed.status).toBe(400);
+    // A new thread can start in full mode too, but only with the confirmation flag.
+    const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
+    const noConfirm = await ctx.req("/api/threads", post({ mode: "agent", workspace: thread.workspace, modelId: model.id, approvalMode: "full" }));
+    expect(noConfirm.status).toBe(400);
+    const started = await ctx.json<{ approvalMode: string }>("/api/threads", post({ mode: "agent", workspace: thread.workspace, modelId: model.id, approvalMode: "full", confirmFull: true }));
+    expect(started.approvalMode).toBe("full");
     await setMode(thread.id, "full");
     const events = await collectRun(ctx, (await send(thread.id, model.id)).runId);
     expect(types(events)).not.toContain("approval");
@@ -313,9 +319,18 @@ describe("tools", () => {
     expect(r2.output).toContain("read_file");
   });
 
-  it("stops after the step limit instead of looping forever", async () => {
+  it("has no step limit by default: the run goes on until the model stops or the owner presses Stop", async () => {
+    const { model, thread } = await setup("agent-loop", "openai-chat", { harness: { on: true, profileId: "ezclaw-agent", tools: [] } });
+    const run = await send(thread.id, model.id);
+    await waitFor(run.runId, (e) => e.type === "step_start" && e.step === 65, 20_000);
+    await ctx.req(`/api/runs/${run.runId}/stop`, { method: "POST" });
+    const events = await collectRun(ctx, run.runId);
+    expect(events.at(-1)).toMatchObject({ type: "done", status: "stopped" });
+  });
+
+  it("stops after the step limit when the profile switches it on", async () => {
     const copy = await ctx.json<HarnessProfile>("/api/harness/ezclaw-agent/duplicate", { method: "POST" });
-    await ctx.json(`/api/harness/${copy.id}`, patch({ loop: { maxSteps: 3 } }));
+    await ctx.json(`/api/harness/${copy.id}`, patch({ loop: { limitSteps: true, maxSteps: 3 } }));
     const { model, thread } = await setup("agent-loop", "openai-chat", { harness: { on: true, profileId: copy.id, tools: [] } });
     const events = await collectRun(ctx, (await send(thread.id, model.id)).runId);
     expect(events.filter((e) => e.type === "step_start")).toHaveLength(3);
@@ -445,6 +460,21 @@ describe("context", () => {
     expect(lastRequest).toContain("Ringkasan percakapan sebelumnya");
     expect(lastRequest).toContain("RINGKASAN uji");
     expect(lastRequest).not.toContain("Pesan lama nomor 1.");
+  });
+
+  it("compacts at the fixed token mark even when the model's window is unknown", async () => {
+    const copy = await ctx.json<HarnessProfile>("/api/harness/ezclaw-agent/duplicate", { method: "POST" });
+    await ctx.json(`/api/harness/${copy.id}`, patch({ loop: { compactAtTokens: 10_000 } }));
+    const { model, thread } = await setup("agent-read", "openai-chat", { harness: { on: true, profileId: copy.id, tools: [] } });
+    const listed = (await ctx.json<{ models: { id: string; summary: { contextLength: number | null } }[] }>("/api/models")).models.find((m) => m.id === model.id)!;
+    expect(listed.summary.contextLength).toBeNull();
+    const insert = ctx.opened.sqlite.prepare("INSERT INTO messages (id, thread_id, seq, role, parts, status, notes, created_at) VALUES (?, ?, ?, ?, ?, 'complete', '[]', 0)");
+    for (let i = 1; i <= 10; i++) {
+      insert.run(`t${i}`, thread.id, i, i % 2 ? "user" : "assistant", JSON.stringify([{ type: "text", text: `Pesan lama nomor ${i}. ${"isi panjang ".repeat(1500)}` }]));
+    }
+    const events = await collectRun(ctx, (await send(thread.id, model.id, "baca hello.txt")).runId);
+    expect(types(events)).toContain("compaction");
+    expect((await getThread(thread.id)).summarySeq).toBeGreaterThan(0);
   });
 });
 

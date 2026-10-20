@@ -14,9 +14,11 @@ import { EditComposer, type EditRef } from "../components/edit/EditComposer";
 import { LineageStrip } from "../components/edit/LineageStrip";
 import { AssetImage } from "../components/image/AssetImage";
 import { ImageInspector } from "../components/image/ImageInspector";
+import { ImageLoader } from "../components/image/ImageLoader";
 import { useImageRun } from "../components/image/useImageRun";
 import { downloadAsset, uploadAsset, ACCEPTED_IMAGE_TYPES } from "../lib/assets";
-import { keys, useEndpoints, useModelProfile, useModels, useSettings, useThread } from "../lib/queries";
+import { canEdit, keys, useEndpoints, useModelProfile, useModels, useSettings, useThread } from "../lib/queries";
+import { newImageParams, withSafeModePref } from "../lib/imageDefaults";
 import { useWide } from "../lib/useWide";
 
 const LAST_MODEL_KEY = "ezclaw.lastEditModel";
@@ -86,10 +88,10 @@ export function EditPage() {
     setManual(null);
     if (thread.data) {
       setModelId(thread.data.modelId);
-      setParams(thread.data.imageParams);
+      setParams(withSafeModePref(thread.data.imageParams));
     } else if (!threadId) {
       setModelId(null);
-      setParams({});
+      setParams(newImageParams());
       setTarget(search.target ?? null);
       setReferences([]);
       setKeep([]);
@@ -118,7 +120,7 @@ export function EditPage() {
   }, [latestResult]);
 
   const modelList = models.data?.models;
-  const imageModels = useMemo(() => (modelList ?? []).filter((m) => m.kind === "image"), [modelList]);
+  const imageModels = useMemo(() => (modelList ?? []).filter((m) => m.kind === "image" && canEdit(m)), [modelList]);
   const chosen: ModelDto | null = useMemo(() => {
     const byId = (id: string | null | undefined) => imageModels.find((m) => m.id === id) ?? null;
     return byId(modelId) ?? (userEdited.current ? null : (byId(settings.data?.defaultModels.edit) ?? byId(settings.data?.defaultModels.image) ?? byId(stored(LAST_MODEL_KEY))));
@@ -333,18 +335,17 @@ export function EditPage() {
             {live && (
               <section aria-label="Sedang dibuat" className="grid gap-2" aria-busy>
                 <h2 className="text-dense font-semibold text-fg-2">{live.composed ? "Prompt dirapikan, sedang mengedit" : "Sedang mengedit"}</h2>
-                <ul className="flex flex-wrap gap-3">
+                <ul className="flex flex-wrap items-start gap-3">
                   {(live.slots.length ? live.slots : [{ status: "queued" as const }]).map((s, i) => (
-                    <li key={i} className="grid h-32 w-32 place-items-center rounded-md bg-sunken p-2 text-center text-dense text-fg-2" role="status">
+                    <li key={i} className="w-56 max-w-full">
                       {s.status === "error" ? (
-                        <span className="text-danger-text">{s.error}</span>
+                        <p className="grid min-h-32 content-center rounded-md bg-danger-soft p-3 text-dense text-danger-text" role="alert">
+                          {s.error}
+                        </p>
                       ) : s.status === "done" && s.assetId ? (
-                        <AssetImage assetId={s.assetId} alt={`Hasil ${i + 1}`} className="h-32 w-32 rounded-md" />
+                        <AssetImage assetId={s.assetId} alt={`Hasil ${i + 1}`} natural className="rounded-md" />
                       ) : (
-                        <span className="grid justify-items-center gap-2">
-                          <span className={s.status === "running" ? "node node-run" : "node"} aria-hidden />
-                          {s.status === "running" ? "Sedang dibuat" : "Antri"}
-                        </span>
+                        <ImageLoader status={s.status === "running" ? "running" : "queued"} backdropAssetId={target} />
                       )}
                     </li>
                   ))}
@@ -390,7 +391,7 @@ export function EditPage() {
                     target: m.target ?? current.parent ?? current.assetId,
                     references: m.references,
                     keep: m.keep ?? [],
-                    params: { ...m.params, ...(current.seed !== undefined ? { seed: current.seed } : {}), n: 1 },
+                    params: withSafeModePref({ ...m.params, ...(current.seed !== undefined ? { seed: current.seed } : {}), n: 1 }),
                   }).catch(() => {});
                 }}
               />
@@ -443,6 +444,7 @@ export function EditPage() {
       <ModelPickerDialog
         open={pickerOpen}
         kind="image"
+        accept={canEdit}
         onClose={() => {
           setPickerOpen(false);
           setFocusSignal((n) => n + 1);
@@ -538,11 +540,15 @@ function TargetDrop({ noEndpoints, noImageModels, uploading, onFiles }: { noEndp
       )}
       {!noEndpoints && noImageModels && (
         <p className="text-dense text-fg-3">
-          Belum ada model gambar.{" "}
-          <Link to="/settings/models" className="text-brand-text underline">
-            Buka daftar model
+          Belum ada model yang bisa mengedit gambar. Tekan Tes koneksi di{" "}
+          <Link to="/settings/endpoints" className="text-brand-text underline">
+            Endpoint
           </Link>{" "}
-          untuk menandai atau menambahkannya.
+          untuk memuat ulang daftar model, atau tandai model di{" "}
+          <Link to="/settings/models" className="text-brand-text underline">
+            daftar model
+          </Link>
+          .
         </p>
       )}
     </div>

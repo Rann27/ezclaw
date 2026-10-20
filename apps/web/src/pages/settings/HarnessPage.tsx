@@ -380,7 +380,7 @@ function ProfileEditor({
       [segs[i], segs[j]] = [segs[j]!, segs[i]!];
       return { ...f, segments: segs };
     });
-  const setLoop = (key: keyof HarnessProfile["loop"], value: number) => setForm((f) => (f ? { ...f, loop: { ...f.loop, [key]: value } } : f));
+  const setLoop = (key: keyof HarnessProfile["loop"], value: number | boolean | null) => setForm((f) => (f ? { ...f, loop: { ...f.loop, [key]: value } } : f));
 
   return (
     <Dialog
@@ -596,8 +596,51 @@ function ProfileEditor({
                   ))}
                 </div>
               </fieldset>
+              <div className="grid gap-2 rounded-sm border border-line p-3">
+                <h3 className="text-dense font-semibold">Batas langkah per run</h3>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={form.loop.limitSteps}
+                  disabled={readOnly}
+                  className="switch justify-self-start"
+                  onClick={() => setLoop("limitSteps", !form.loop.limitSteps)}
+                >
+                  <span className="switch-track" aria-hidden />
+                  {form.loop.limitSteps ? "Batas langkah: ON" : "Batas langkah: OFF"}
+                </button>
+                <p className="text-dense text-fg-3">
+                  {form.loop.limitSteps
+                    ? `Run berhenti setelah ${form.loop.maxSteps} langkah, walaupun pekerjaan belum selesai.`
+                    : "Tanpa batas: run berjalan sampai model selesai sendiri, atau sampai kamu menekan Stop."}
+                </p>
+              </div>
+              <div className="grid gap-2 rounded-sm border border-line p-3">
+                <h3 className="text-dense font-semibold">Padatkan konteks berdasarkan jumlah token</h3>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={form.loop.compactAtTokens !== null}
+                  disabled={readOnly}
+                  className="switch justify-self-start"
+                  onClick={() => setLoop("compactAtTokens", form.loop.compactAtTokens === null ? 150_000 : null)}
+                >
+                  <span className="switch-track" aria-hidden />
+                  {form.loop.compactAtTokens !== null ? "Batas token: ON" : "Batas token: OFF"}
+                </button>
+                {form.loop.compactAtTokens !== null && (
+                  <NumberInput id={`${formId}-compact-tokens`} label="Padatkan saat konteks melewati (token)" value={form.loop.compactAtTokens} min={10000} max={2000000} step={10000} disabled={readOnly} onChange={(v) => setLoop("compactAtTokens", v)} />
+                )}
+                <p className="text-dense text-fg-3">
+                  {form.loop.compactAtTokens !== null
+                    ? `Percakapan lama diringkas begitu konteks melewati ${form.loop.compactAtTokens.toLocaleString("id-ID")} token, atau ${Math.round(form.loop.compactAt * 100)}% jendela model, mana yang lebih dulu. Request tetap kecil, lebih cepat, dan lebih murah.`
+                    : `Hanya memakai ${Math.round(form.loop.compactAt * 100)}% jendela model. Untuk model 1 juta token, riwayat bisa tumbuh sampai ratusan ribu token di setiap langkah.`}
+                </p>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <NumberInput id={`${formId}-steps`} label="Maks langkah per run" value={form.loop.maxSteps} min={1} max={500} disabled={readOnly} onChange={(v) => setLoop("maxSteps", v)} />
+                {form.loop.limitSteps && (
+                  <NumberInput id={`${formId}-steps`} label="Maks langkah per run" value={form.loop.maxSteps} min={1} max={500} disabled={readOnly} onChange={(v) => setLoop("maxSteps", v)} />
+                )}
                 <NumberInput id={`${formId}-clip`} label="Batas output tool (karakter)" value={form.loop.toolOutputLimit} min={1000} max={400000} disabled={readOnly} onChange={(v) => setLoop("toolOutputLimit", v)} />
                 <NumberInput id={`${formId}-compact`} label="Padatkan konteks pada (0.3 sampai 0.95)" value={form.loop.compactAt} min={0.3} max={0.95} step={0.05} disabled={readOnly} onChange={(v) => setLoop("compactAt", v)} />
                 <NumberInput id={`${formId}-timeout`} label="Batas waktu perintah (ms)" value={form.loop.shellTimeoutMs} min={1000} max={600000} step={1000} disabled={readOnly} onChange={(v) => setLoop("shellTimeoutMs", v)} />

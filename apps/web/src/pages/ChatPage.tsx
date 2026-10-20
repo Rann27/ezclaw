@@ -13,7 +13,7 @@ import { Inspector } from "../components/chat/Inspector";
 import { AssistantMessage, UserMessage } from "../components/chat/MessageView";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
 import { useLiveRun } from "../components/chat/useLiveRun";
-import { keys, useEndpoints, useModels, useSettings, useThread } from "../lib/queries";
+import { canChat, keys, useEndpoints, useModels, useSettings, useThread } from "../lib/queries";
 
 const LAST_MODEL_KEY = "ezclaw.lastModel";
 const WIDE = "(min-width: 1280px)";
@@ -101,7 +101,7 @@ export function ChatPage() {
   const modelList = models.data?.models;
   const chosen: ModelDto | null = useMemo(() => {
     if (!modelList) return null;
-    const textModels = modelList.filter((m) => m.kind !== "image");
+    const textModels = modelList.filter(canChat);
     const byId = (id: string | null | undefined) => textModels.find((m) => m.id === id) ?? null;
     return byId(draft.modelId) ?? (userEdited.current ? null : byId(settings.data?.defaultModels.chat) ?? byId(readLastModel()));
   }, [modelList, draft.modelId, settings.data?.defaultModels.chat]);
@@ -304,7 +304,7 @@ export function ChatPage() {
         </Dialog>
       )}
 
-      <ModelPickerDialog open={pickerOpen} onClose={() => { setPickerOpen(false); setFocusSignal((n) => n + 1); }} selectedId={chosen?.id ?? null} onSelect={(m) => update({ modelId: m.id })} />
+      <ModelPickerDialog accept={canChat} open={pickerOpen} onClose={() => { setPickerOpen(false); setFocusSignal((n) => n + 1); }} selectedId={chosen?.id ?? null} onSelect={(m) => update({ modelId: m.id })} />
       <ProfileDialog modelId={profileFor} onClose={() => setProfileFor(null)} />
       <RequestLogDialog messageId={logFor} onClose={() => setLogFor(null)} />
 

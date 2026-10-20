@@ -6,7 +6,15 @@ import { useId, useMemo, useState, type FormEvent } from "react";
 import { api } from "../../api";
 import { Dialog } from "../../components/Dialog";
 import { ProfileDialog } from "../../components/ProfileDialog";
-import { modelLabel, useInvalidateRegistry, useModels } from "../../lib/queries";
+import { canAgent, canChat, canEdit, canGenerate, modelLabel, useInvalidateRegistry, useModels } from "../../lib/queries";
+
+type UseFilter = "" | "chat" | "agent" | "image" | "edit";
+const USE_FILTERS: { id: Exclude<UseFilter, "">; label: string; test: (m: ModelDto) => boolean }[] = [
+  { id: "chat", label: "Chat", test: canChat },
+  { id: "agent", label: "Agent (punya tools)", test: canAgent },
+  { id: "image", label: "Image", test: (m) => m.kind === "image" && canGenerate(m) },
+  { id: "edit", label: "Edit", test: (m) => m.kind === "image" && canEdit(m) },
+];
 
 const PAGE = 80;
 const SOURCE_LABEL: Record<ModelDto["source"], string> = {
@@ -20,6 +28,7 @@ export function ModelsPage() {
   const [query, setQuery] = useState("");
   const [endpointId, setEndpointId] = useState("");
   const [onlyFavorite, setOnlyFavorite] = useState(false);
+  const [use, setUse] = useState<UseFilter>("");
   const [limit, setLimit] = useState(PAGE);
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [aliasFor, setAliasFor] = useState<ModelDto | null>(null);
@@ -38,9 +47,10 @@ export function ModelsPage() {
     return all
       .filter((m) => !endpointId || m.endpointId === endpointId)
       .filter((m) => !onlyFavorite || m.favorite)
+      .filter((m) => !use || USE_FILTERS.find((f) => f.id === use)!.test(m))
       .filter((m) => !q || `${m.name} ${m.alias ?? ""} ${m.modelId}`.toLowerCase().includes(q))
       .sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.endpointName.localeCompare(b.endpointName) || a.modelId.localeCompare(b.modelId));
-  }, [all, endpointId, onlyFavorite, query]);
+  }, [all, endpointId, onlyFavorite, query, use]);
 
   return (
     <div className="grid gap-6">
@@ -95,6 +105,19 @@ export function ModelsPage() {
                 ))}
               </select>
             </div>
+            <div className="grid gap-1">
+              <label htmlFor="m-use" className="text-dense font-semibold">
+                Dipakai untuk
+              </label>
+              <select id="m-use" className="select" value={use} onChange={(e) => { setUse(e.target.value as UseFilter); setLimit(PAGE); }}>
+                <option value="">Semua mode</option>
+                {USE_FILTERS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label} ({all.filter(f.test).length})
+                  </option>
+                ))}
+              </select>
+            </div>
             <button type="button" className="chip-toggle" aria-pressed={onlyFavorite} onClick={() => setOnlyFavorite((v) => !v)}>
               Hanya favorit
             </button>
@@ -114,7 +137,7 @@ export function ModelsPage() {
                     <span className="text-ui font-semibold">{modelLabel(m)}</span>
                     <span className="ep-tag">{m.endpointName}</span>
                     <span className="text-meta text-fg-3">{SOURCE_LABEL[m.source]}</span>
-                    {m.kind === "image" && <span className="ep-tag">gambar</span>}
+                    {m.kind === "image" && <span className="ep-tag">{m.summary.editOnly ? "gambar, khusus edit" : "gambar"}</span>}
                     {m.hasOverride && <span className="ep-tag">override</span>}
                     {m.omitCount > 0 && <span className="ep-tag">{m.omitCount} field ditolak</span>}
                   </div>

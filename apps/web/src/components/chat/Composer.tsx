@@ -5,6 +5,8 @@ import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent,
 import { ModelChip } from "../ModelPicker";
 
 interface ComposerProps {
+  /** Agent: as wide as its timeline instead of the reading width. */
+  wide?: boolean;
   model: ModelDto | null;
   onPickModel: () => void;
   running: boolean;
@@ -24,7 +26,7 @@ interface ComposerProps {
   trailing?: ReactNode;
 }
 
-export function Composer({ model, onPickModel, running, keyMissing, onSend, onStop, error, focusSignal, placeholder = "Tulis pesan", extra, blockedBecause, trailing }: ComposerProps) {
+export function Composer({ model, onPickModel, running, keyMissing, onSend, onStop, error, focusSignal, placeholder = "Tulis pesan", extra, blockedBecause, trailing, wide = false }: ComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
@@ -69,7 +71,7 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="mx-auto w-full max-w-[calc(var(--read-max)+3rem)] px-4 pb-4" aria-label="Tulis pesan">
+    <form onSubmit={(e) => void submit(e)} className={`mx-auto w-full ${wide ? "max-w-[72rem]" : "max-w-[calc(var(--read-max)+3rem)]"} px-4 pb-4`} aria-label="Tulis pesan">
       {error && (
         <p className="mb-2 rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text" role="alert">
           {error}

@@ -1,6 +1,6 @@
 {
   "source": "https://api-docs.deepseek.com/guides/thinking_mode",
-  "checked": "2026-10-15",
+  "checked": "2026-10-18",
   "rules": [
     {
       "endpoint": "deepseek",
@@ -36,6 +36,17 @@
         "notes": [
           "Thinking aktif secara default dengan effort high. top_p hanya berlaku saat thinking aktif, rentang efektif 0.95 sampai 1.0.",
           "Saat memakai tools, reasoning_content semua giliran sebelumnya wajib dikirim ulang atau API menjawab 400 (diterapkan di M2)."
+        ]
+      }
+    },
+    {
+      "endpoint": "deepseek",
+      "model": "^deepseek-(flash|v4)",
+      "patch": {
+        "contextLength": 1000000,
+        "maxOutputTokens": 384000,
+        "notes": [
+          "Konteks 1M token, output maksimal 384K (halaman harga DeepSeek, diperiksa 2026-10-18)."
         ]
       }
     }

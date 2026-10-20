@@ -1,7 +1,7 @@
 import { buildChatRequest, resolveProfile, type ChatParams } from "@ezclaw/core";
 import { describe, expect, it } from "vitest";
 import { ENDPOINT_PRESETS, getEndpointPreset, profileFamily } from "./catalog.js";
-import { DiscoveryParseError, parseModelList } from "./discovery.js";
+import { DiscoveryParseError, listPath, parseModelList } from "./discovery.js";
 import { PRESET_FILES, matchPresets } from "./presets.js";
 
 const hello = [{ role: "user" as const, parts: [{ type: "text" as const, text: "halo" }] }];
@@ -139,6 +139,40 @@ describe("discovery parsers", () => {
     });
     expect(models[0]?.patch.sampling?.temperature).toMatchObject({ default: 0.8 });
     expect(models[1]?.meta.constraints).toMatchObject({ aspectRatios: ["1:1"] });
+  });
+
+  it("Venice: inpaint models are edit-only image models, image models take no input image", () => {
+    const [edit, gen] = parseModelList("venice", {
+      data: [
+        { id: "qwen-image-2-edit", type: "inpaint", model_spec: { name: "Qwen Edit", constraints: { aspectRatios: ["auto", "1:1"], promptCharacterLimit: 2000, combineImages: false } } },
+        { id: "flux-2", type: "image", model_spec: { name: "Flux 2", constraints: { resolutions: ["1K", "2K"], steps: { default: 20, max: 40 }, promptCharacterLimit: 2000, widthHeightDivisor: 16 } } },
+      ],
+    });
+    expect(edit).toMatchObject({ kind: "image", patch: { inputModalities: ["text", "image"], image: { editOnly: true, maxInputImages: 1, aspectRatios: ["auto", "1:1"], resolutions: [] } } });
+    expect(gen).toMatchObject({ kind: "image", patch: { image: { maxInputImages: 0, resolutions: ["1K", "2K"], steps: { max: 40, default: 20 } } } });
+  });
+
+  it("plain lists: image models are recognised by name", () => {
+    const ms = parseModelList("openai", { data: ["gpt-5.5", "gpt-image-2", "dall-e-3", "grok-imagine-image", "gemini-3-flash-image-preview", "text-embedding-3", "qwen-image-edit"].map((id) => ({ id })) });
+    expect(ms.filter((m) => m.kind === "image").map((m) => m.modelId)).toEqual(["gpt-image-2", "dall-e-3", "grok-imagine-image", "gemini-3-flash-image-preview", "qwen-image-edit"]);
+  });
+
+  it("Venice: input image limits for multi-edit and style references", () => {
+    const [combine, listed, single, styled] = parseModelList("venice", {
+      data: [
+        { id: "a-edit", type: "inpaint", model_spec: { constraints: { aspectRatios: ["auto"], promptCharacterLimit: 1, combineImages: true } } },
+        { id: "b-edit", type: "inpaint", model_spec: { constraints: { aspectRatios: ["auto"], promptCharacterLimit: 1, combineImages: true, maxInputImages: 10 } } },
+        { id: "c-edit", type: "inpaint", model_spec: { constraints: { aspectRatios: ["auto"], promptCharacterLimit: 1, combineImages: false } } },
+        { id: "krea", type: "image", model_spec: { constraints: { promptCharacterLimit: 1, steps: { default: 1, max: 2 }, widthHeightDivisor: 16, maxStyleReferences: 3 } } },
+      ],
+    });
+    expect([combine, listed, single, styled].map((m) => m!.patch.image?.maxInputImages)).toEqual([3, 10, 1, 3]);
+  });
+
+  it("list paths ask Venice and OpenRouter for image models too", () => {
+    expect(listPath("venice")).toBe("/models?type=all");
+    expect(listPath("openrouter")).toBe("/models?output_modalities=text,image");
+    expect(listPath("openai")).toBe("/models");
   });
 
   it("Anthropic: derives the thinking style and effort levels from capabilities", () => {

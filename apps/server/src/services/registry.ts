@@ -34,7 +34,7 @@ import {
 } from "@ezclaw/registry";
 import { and, count, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { endpoints, models } from "../db/schema.js";
+import { endpoints, models, settings } from "../db/schema.js";
 import { HttpError } from "../errors.js";
 import { buildHeaders, joinUrl, keyLast4, networkError, parseProviderError, ProviderError, type ConnectionInfo } from "../provider/http.js";
 import type { SecretStore } from "../secrets.js";
@@ -45,6 +45,12 @@ type ModelRow = typeof models.$inferSelect;
 
 const DISCOVERY_TIMEOUT_MS = 20_000;
 const MAX_MODELS_PER_ENDPOINT = 5000;
+/**
+ * Bump when discovery starts finding models it missed before (e.g. 2: Venice image/edit and
+ * OpenRouter image models; 3: Venice multi-edit and style-reference limits). On start, endpoints that connected earlier reload their lists once.
+ */
+export const DISCOVERY_VERSION = 3;
+const DISCOVERY_VERSION_KEY = "_discoveryVersion";
 
 export interface ResolvedModel {
   row: ModelRow;
@@ -245,6 +251,27 @@ export class RegistryService {
     return row.protocol === "anthropic" ? "anthropic" : "openai";
   }
 
+  /** Reloads model lists made by an older discovery. Free (a GET of the list); failures stay on each endpoint's test status. */
+  async refreshStaleDiscovery(): Promise<number> {
+    const stored = this.db.select().from(settings).where(eq(settings.key, DISCOVERY_VERSION_KEY)).get()?.value;
+    if (stored === DISCOVERY_VERSION) return 0;
+    const due = this.db.select().from(endpoints).where(eq(endpoints.lastTestOk, true)).all();
+    for (const row of due) {
+      try {
+        await this.testEndpoint(row.id);
+      } catch {
+        // One broken endpoint must not keep the others from refreshing.
+      }
+    }
+    const now = new Date();
+    this.db
+      .insert(settings)
+      .values({ key: DISCOVERY_VERSION_KEY, value: DISCOVERY_VERSION, updatedAt: now })
+      .onConflictDoUpdate({ target: settings.key, set: { value: DISCOVERY_VERSION, updatedAt: now } })
+      .run();
+    return due.length;
+  }
+
   async testEndpoint(id: string): Promise<EndpointTestResponse> {
     const row = this.endpointRow(id);
     const conn = this.connectionFor(row);
@@ -391,6 +418,7 @@ export class RegistryService {
   private toModelDto(m: ResolvedModel): ModelDto {
     const { row, endpoint, resolved } = m;
     const profile = resolved.profile;
+    const image = row.kind === "image" ? this.imageSpecOf(m).spec : null;
     return {
       id: row.id,
       endpointId: endpoint.id,
@@ -409,6 +437,8 @@ export class RegistryService {
         reasoning: profile.reasoning.style !== "none" || profile.reasoning.defaultOn,
         reasoningStyle: profile.reasoning.style,
         contextLength: profile.contextLength,
+        imageInputs: image ? image.maxInputImages : null,
+        editOnly: image?.editOnly ?? false,
       },
       hasOverride: row.override !== null,
       omitCount: row.omit.length,
@@ -449,7 +479,10 @@ export class RegistryService {
    * presets and the owner's override say. Models nobody configured get the wire their provider normally uses.
    */
   imageSpecFor(rowId: string): { wire: ImageWire; spec: ImageSpec; textOutput: boolean } {
-    const m = this.resolveModel(rowId);
+    return this.imageSpecOf(this.resolveModel(rowId));
+  }
+
+  private imageSpecOf(m: ResolvedModel): { wire: ImageWire; spec: ImageSpec; textOutput: boolean } {
     const profile = m.resolved.profile;
     const known = profile.outputModalities.includes("image");
     const textOutput = known ? profile.outputModalities.includes("text") : false;

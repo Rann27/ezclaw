@@ -122,6 +122,8 @@ export const imageSpecSchema = z.object({
   guidance: numberSpecSchema.nullable(),
   /** True when the model sees the conversation, so a follow-up needs no rewritten prompt. */
   conversational: z.boolean(),
+  /** True for models that only change an input image (Venice inpaint/edit models); they cannot start from text alone. */
+  editOnly: z.boolean().default(false),
 });
 export type ImageSpec = z.infer<typeof imageSpecSchema>;
 

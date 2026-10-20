@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { api } from "../../api";
 import { modelLabel, useInvalidateRegistry, useModelProfile, useModels, useSettings } from "../../lib/queries";
+import { rememberSafeMode } from "../../lib/imageDefaults";
 import { ModelChip } from "../ModelPicker";
 
 interface Props {
@@ -111,6 +112,50 @@ export function ImageInspector({ mode = "image", model, onPickModel, onShowProfi
             <h2 id="img-params" className="text-dense font-semibold text-fg-2">
               Parameter
             </h2>
+            {spec.wire === "venice-image" && (
+              <>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={params.safeMode === true}
+                  disabled={running}
+                  className="switch"
+                  onClick={() => {
+                    const on = params.safeMode !== true;
+                    rememberSafeMode(on);
+                    set({ safeMode: on ? true : undefined });
+                  }}
+                >
+                  <span className="switch-track" aria-hidden />
+                  {params.safeMode === true ? "Safe mode Venice: ON" : "Safe mode Venice: OFF"}
+                </button>
+                <p className="text-dense text-fg-3">
+                  {params.safeMode === true
+                    ? "Venice memburamkan gambar yang dinilainya konten dewasa. Gambar yang diburamkan tetap ditagih."
+                    : "Dikirim safe_mode: false, jadi hasil tidak diburamkan. Gambar yang melanggar ketentuan Venice tetap bisa ditolak."}
+                </p>
+              </>
+            )}
+            {editing && (
+              <>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={params.matchTarget !== false}
+                  disabled={running}
+                  className="switch"
+                  onClick={() => set({ matchTarget: params.matchTarget === false ? undefined : false })}
+                >
+                  <span className="switch-track" aria-hidden />
+                  {params.matchTarget !== false ? "Ukuran sama dengan target: ON" : "Ukuran sama dengan target: OFF"}
+                </button>
+                <p className="text-dense text-fg-3">
+                  {params.matchTarget !== false
+                    ? "Hasil diubah ke ukuran piksel gambar yang diedit. Aspect ratio dan resolusi yang kosong dipilih otomatis dari gambar itu."
+                    : "Hasil disimpan dalam ukuran dari provider."}
+                </p>
+              </>
+            )}
             <SelectField label="Ukuran" value={params.size} options={spec.sizes} disabled={running} onChange={(v) => set({ size: v })} />
             <SelectField label="Aspect ratio" value={params.aspectRatio} options={spec.aspectRatios} disabled={running} onChange={(v) => set({ aspectRatio: v })} />
             <SelectField label="Resolusi" value={params.resolution} options={spec.resolutions} disabled={running} onChange={(v) => set({ resolution: v })} />

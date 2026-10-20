@@ -124,6 +124,9 @@ export interface ModelSummary {
   reasoning: boolean;
   reasoningStyle: ReasoningStyle;
   contextLength: number | null;
+  /** Image models only: most input images per request (0 = text-to-image only), and whether it can only edit. */
+  imageInputs: number | null;
+  editOnly: boolean;
 }
 
 export interface ModelDto {
@@ -187,6 +190,8 @@ export const threadCreateSchema = z.object({
   /** Agent threads: absolute path of the folder to work in. */
   workspace: z.string().trim().min(1).max(1000).optional(),
   approvalMode: approvalModeSchema.optional(),
+  /** Required (true) to start in the automatic mode: the owner confirmed the warning first. */
+  confirmFull: z.boolean().optional(),
   harness: threadHarnessSchema.optional(),
 });
 

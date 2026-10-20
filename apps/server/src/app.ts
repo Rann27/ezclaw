@@ -40,6 +40,9 @@ import {
   type RequestLogResponse,
   type ThreadListResponse,
 } from "@ezclaw/core";
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { desc, isNotNull } from "drizzle-orm";
@@ -69,6 +72,25 @@ export interface AppDeps {
 
 const HEARTBEAT_MS = 15_000;
 
+// The bundle this process runs from; a newer file on disk means a build happened after start.
+const CODE_FILE = fileURLToPath(import.meta.url);
+const codeMtime = (): number => {
+  try {
+    return statSync(CODE_FILE).mtimeMs;
+  } catch {
+    return 0;
+  }
+};
+const LOADED_MTIME = codeMtime();
+
+function webEntry(distDir: string): string | null {
+  try {
+    return /<script[^>]*type="module"[^>]*src="([^"]+)"/.exec(readFileSync(join(distDir, "index.html"), "utf8"))?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) {
   const { registry, runs, chat, secrets, harness, rules, assets, image, memory, checkpoints, processes } = services;
   const app = new Hono();
@@ -87,6 +109,8 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
       dbPath,
       startedAt: startedAt.toISOString(),
       secretStore: secrets.status(),
+      stale: codeMtime() > LOADED_MTIME,
+      webEntry: webEntry(config.webDistDir),
     }),
   );
 
@@ -146,7 +170,7 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
     const role = input.mode === "agent" ? "agent" : input.mode === "image" ? "image" : input.mode === "edit" ? "edit" : "chat";
     const defaultModelId = settings.defaultModels[role] ?? (input.mode === "edit" ? settings.defaultModels.image : input.mode === "image" ? undefined : settings.defaultModels.chat);
     return c.json(
-      chat.create({ mode: input.mode, modelId: input.modelId, defaultModelId, workspace: input.workspace, approvalMode: input.approvalMode, harness: input.harness }),
+      chat.create({ mode: input.mode, modelId: input.modelId, defaultModelId, workspace: input.workspace, approvalMode: input.approvalMode, confirmFull: input.confirmFull, harness: input.harness }),
       201,
     );
   });

@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { Dialog } from "../components/Dialog";
 import { ModelPickerDialog } from "../components/ModelPicker";
+import { ratioFromParams } from "../components/image/ImageLoader";
+import { newImageParams, withSafeModePref } from "../lib/imageDefaults";
 import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
@@ -13,7 +15,7 @@ import { ImageComposer } from "../components/image/ImageComposer";
 import { ImageInspector } from "../components/image/ImageInspector";
 import { AssistantTurn, UserTurn, type RunRequest } from "../components/image/ImageTurn";
 import { useImageRun } from "../components/image/useImageRun";
-import { keys, useEndpoints, useModelProfile, useModels, useSettings, useThread } from "../lib/queries";
+import { canGenerate, keys, useEndpoints, useModelProfile, useModels, useSettings, useThread } from "../lib/queries";
 import { useWide } from "../lib/useWide";
 
 const LAST_MODEL_KEY = "ezclaw.lastImageModel";
@@ -45,7 +47,7 @@ export function ImagePage() {
   const { live: liveRaw, attach, stop } = useImageRun(threadId, thread.data?.activeRun);
   const live = liveRaw && liveRaw.threadId === threadId ? liveRaw : null;
 
-  const [draft, setDraft] = useState<Draft>({ modelId: null, params: {} });
+  const [draft, setDraft] = useState<Draft>(() => ({ modelId: null, params: newImageParams() }));
   const userEdited = useRef(false);
   const [text, setText] = useState("");
   const [references, setReferences] = useState<ImageReference[]>([]);
@@ -66,14 +68,14 @@ export function ImagePage() {
   useEffect(() => {
     userEdited.current = false;
     setSendError(null);
-    if (thread.data) setDraft({ modelId: thread.data.modelId, params: thread.data.imageParams });
-    else if (!threadId) setDraft({ modelId: null, params: {} });
+    if (thread.data) setDraft({ modelId: thread.data.modelId, params: withSafeModePref(thread.data.imageParams) });
+    else if (!threadId) setDraft({ modelId: null, params: newImageParams() });
     // Re-run only when the thread being shown changes, not on every refetch of the same thread.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedThread, threadId]);
 
   const modelList = models.data?.models;
-  const imageModels = useMemo(() => (modelList ?? []).filter((m) => m.kind === "image"), [modelList]);
+  const imageModels = useMemo(() => (modelList ?? []).filter((m) => m.kind === "image" && canGenerate(m)), [modelList]);
   const chosen: ModelDto | null = useMemo(() => {
     const byId = (id: string | null | undefined) => imageModels.find((m) => m.id === id) ?? null;
     return byId(draft.modelId) ?? (userEdited.current ? null : (byId(settings.data?.defaultModels.image) ?? byId(stored(LAST_MODEL_KEY))));
@@ -216,6 +218,7 @@ export function ImagePage() {
                   key={m.id}
                   message={m}
                   live={live && live.messageId === m.id ? live : null}
+                  pendingRatio={ratioFromParams(draft.params)}
                   running={running}
                   maxReferences={spec?.maxInputImages ?? 0}
                   onShowRequest={setLogFor}
@@ -274,6 +277,7 @@ export function ImagePage() {
       <ModelPickerDialog
         open={pickerOpen}
         kind="image"
+        accept={canGenerate}
         onClose={() => {
           setPickerOpen(false);
           setFocusSignal((n) => n + 1);

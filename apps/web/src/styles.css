@@ -168,6 +168,36 @@
   }
 }
 
+/* Image still being made: a brand band rises through the frame, like the run node, slowed down. */
+@layer components {
+  .img-loader-backdrop {
+    opacity: 0.35;
+    filter: grayscale(0.6) blur(2px);
+  }
+  .img-loader[data-running]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, transparent, color-mix(in oklab, var(--brand) 22%, transparent) 50%, transparent);
+    transform: translateY(100%);
+    animation: img-rise 2.4s var(--ease) infinite;
+    pointer-events: none;
+  }
+}
+
+@keyframes img-rise {
+  0% { transform: translateY(100%); }
+  100% { transform: translateY(-100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .img-loader[data-running]::after {
+    animation: none;
+    transform: none;
+    opacity: 0.5;
+  }
+}
+
 /* Rendered markdown in answers */
 @layer components {
   .prose-ez {

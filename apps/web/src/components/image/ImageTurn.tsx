@@ -5,6 +5,8 @@ import { useRef, useState, type ReactNode } from "react";
 import { downloadAsset } from "../../lib/assets";
 import { Dialog } from "../Dialog";
 import { AssetImage } from "./AssetImage";
+import { ImageLoader, ratioFromParams } from "./ImageLoader";
+import { withSafeModePref } from "../../lib/imageDefaults";
 import type { LiveImageRun, Slot } from "./useImageRun";
 
 export interface RunRequest {
@@ -40,6 +42,8 @@ export function UserTurn({ message }: { message: MessageDto }) {
 interface TurnProps {
   message: MessageDto;
   live: LiveImageRun | null;
+  /** Shape of results still being made, from the params of this run. */
+  pendingRatio?: string;
   running: boolean;
   /** How many reference images the current model takes; 0 disables "use as reference". */
   maxReferences: number;
@@ -48,7 +52,7 @@ interface TurnProps {
   onUseAsReference: (assetId: string) => void;
 }
 
-export function AssistantTurn({ message, live, running, maxReferences, onShowRequest, onRun, onUseAsReference }: TurnProps) {
+export function AssistantTurn({ message, live, running, maxReferences, onShowRequest, onRun, onUseAsReference, pendingRatio }: TurnProps) {
   const meta = message.image;
   const streaming = live ? !live.disconnected : message.status === "streaming";
   const composed = live?.composed ?? null;
@@ -56,20 +60,23 @@ export function AssistantTurn({ message, live, running, maxReferences, onShowReq
   const [zoom, setZoom] = useState<string | null>(null);
 
   const done = message.parts.flatMap((p) => (p.type === "image" ? [p] : []));
-  const slots: Slot[] = live && live.slots.length > 0 ? live.slots : done.map((p) => ({ status: "done" as const, assetId: p.assetId, ...(p.seed !== undefined ? { seed: p.seed } : {}) }));
+  const finished: Slot[] = done.map((p) => ({ status: "done" as const, assetId: p.assetId, ...(p.seed !== undefined ? { seed: p.seed } : {}) }));
+  // Before the first slot event (prompt still being composed) one waiting frame stands in.
+  const slots: Slot[] = live && live.slots.length > 0 ? live.slots : streaming && finished.length === 0 ? [{ status: "queued" }] : finished;
+  const ratio = meta?.params ? ratioFromParams(meta.params) : (pendingRatio ?? "1 / 1");
   const sentPrompt = meta?.sentPrompt ?? (composed ? composed.prompt : null);
   const wasComposed = meta?.composed ?? composed !== null;
   const text = textOf(message);
 
   return (
     <article className="grid gap-3" aria-label="Hasil gambar" aria-busy={streaming}>
-      {sentPrompt !== null && <PromptBlock key={message.id + (sentPrompt ?? "")} prompt={sentPrompt} composed={wasComposed} references={meta?.references ?? []} disabled={running} onResend={(t) => onRun({ text: t, exact: true, references: meta?.references ?? [], params: meta?.params ?? {} })} />}
+      {sentPrompt !== null && <PromptBlock key={message.id + (sentPrompt ?? "")} prompt={sentPrompt} composed={wasComposed} references={meta?.references ?? []} disabled={running} onResend={(t) => onRun({ text: t, exact: true, references: meta?.references ?? [], params: withSafeModePref(meta?.params ?? {}) })} />}
 
       {slots.length > 0 && (
         <ul className={`grid gap-3 ${slots.length === 1 ? "max-w-md" : "sm:grid-cols-2"}`} aria-label="Gambar">
           {slots.map((s, i) => (
             <li key={s.assetId ?? i} className="grid content-start gap-2">
-              <SlotView slot={s} index={i} onZoom={() => s.assetId && setZoom(s.assetId)} />
+              <SlotView slot={s} index={i} ratio={ratio} onZoom={() => s.assetId && setZoom(s.assetId)} />
               {s.status === "done" && s.assetId && (
                 <div className="flex flex-wrap gap-1">
                   <ActionButton icon={<ArrowsOutIcon size={14} aria-hidden />} label="Perbesar" onClick={() => setZoom(s.assetId!)} />
@@ -91,7 +98,7 @@ export function AssistantTurn({ message, live, running, maxReferences, onShowReq
                       icon={<DiceFiveIcon size={14} aria-hidden />}
                       label={`Ulangi, seed ${s.seed}`}
                       disabled={running}
-                      onClick={() => void onRun({ text: meta.sentPrompt, exact: true, references: meta.references, params: { ...meta.params, seed: s.seed, n: 1 } }).catch(() => {})}
+                      onClick={() => void onRun({ text: meta.sentPrompt, exact: true, references: meta.references, params: withSafeModePref({ ...meta.params, seed: s.seed, n: 1 }) }).catch(() => {})}
                     />
                   )}
                 </div>
@@ -147,7 +154,7 @@ export function AssistantTurn({ message, live, running, maxReferences, onShowReq
   );
 }
 
-function SlotView({ slot, index, onZoom }: { slot: Slot; index: number; onZoom: () => void }) {
+function SlotView({ slot, index, ratio, onZoom }: { slot: Slot; index: number; ratio: string; onZoom: () => void }) {
   if (slot.status === "done" && slot.assetId) {
     return (
       <button type="button" className="block overflow-hidden rounded-md border border-line text-left" onClick={onZoom} aria-label={`Perbesar gambar ${index + 1}`}>
@@ -163,14 +170,7 @@ function SlotView({ slot, index, onZoom }: { slot: Slot; index: number; onZoom: 
       </div>
     );
   }
-  return (
-    <div className="grid aspect-square place-items-center rounded-md bg-sunken text-ui text-fg-2" role="status">
-      <span className="grid justify-items-center gap-2">
-        <span className={slot.status === "running" ? "node node-run" : "node"} aria-hidden />
-        {slot.status === "running" ? "Sedang dibuat" : "Antri"}
-      </span>
-    </div>
-  );
+  return <ImageLoader status={slot.status === "running" ? "running" : "queued"} ratio={ratio} />;
 }
 
 function ActionButton({ icon, label, onClick, disabled, title }: { icon: ReactNode; label: string; onClick: () => void; disabled?: boolean; title?: string }) {

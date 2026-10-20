@@ -44,7 +44,7 @@ export function ThreadList({ mode }: { mode: Mode }) {
       )}
 
       {query.isSuccess && query.data.threads.length > 0 && (
-        <ul className="grid gap-px overflow-y-auto">
+        <ul className="grid grid-cols-[minmax(0,1fr)] gap-px overflow-y-auto overflow-x-hidden">
           {query.data.threads.map((t) => {
             const current = t.id === active;
             return (
@@ -60,7 +60,7 @@ export function ThreadList({ mode }: { mode: Mode }) {
                   ].join(" ")}
                 >
                   {t.pinned && <span className="node node-done" aria-label="Disematkan" />}
-                  <span className="truncate">{t.title}</span>
+                  <span className="min-w-0 truncate">{t.title}</span>
                 </Link>
               </li>
             );

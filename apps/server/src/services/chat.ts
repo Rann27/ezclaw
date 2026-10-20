@@ -90,7 +90,7 @@ export class ChatService {
     return { on: h.on, profileId: h.profileId, tools: h.tools.filter((t) => known.has(t)) };
   }
 
-  create(input: { mode: "chat" | "agent" | "image" | "edit"; modelId?: string; defaultModelId?: string; workspace?: string; approvalMode?: ApprovalMode; harness?: ThreadHarness }): ThreadDetailDto {
+  create(input: { mode: "chat" | "agent" | "image" | "edit"; modelId?: string; defaultModelId?: string; workspace?: string; approvalMode?: ApprovalMode; confirmFull?: boolean; harness?: ThreadHarness }): ThreadDetailDto {
     const modelId = input.modelId ?? input.defaultModelId ?? null;
     this.checkModel(modelId);
     let workspace: string | null = null;
@@ -98,8 +98,8 @@ export class ChatService {
       if (!input.workspace) throw new HttpError(400, "workspace_required", "Pilih folder workspace untuk thread Agent.");
       workspace = this.checkWorkspace(input.workspace);
     }
-    if (input.approvalMode === "full") {
-      throw new HttpError(400, "confirm_required", "Mode Otomatis penuh harus dinyalakan dari dialog konfirmasi di thread yang sudah dibuat.");
+    if (input.approvalMode === "full" && input.confirmFull !== true) {
+      throw new HttpError(400, "confirm_required", "Mode Otomatis penuh harus dinyalakan lewat dialog konfirmasi.");
     }
     const harness = this.checkHarness(input.harness ?? (input.mode === "agent" ? AGENT_HARNESS : CHAT_HARNESS), input.mode === "agent" ? "agent" : "chat");
     const now = new Date();

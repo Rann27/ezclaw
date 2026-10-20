@@ -1,6 +1,7 @@
 import { buildVersions, type AssetDto, type EndpointDto, type ModelDto, type ModelListResponse, type RunEvent, type SendMessageResponse, type ThreadDetailDto } from "@ezclaw/core";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { collectRun, createTestContext, type TestContext } from "./testing/harness.js";
+import { sniffImage } from "./services/imageInfo.js";
 import { makePng } from "./testing/mockImages.js";
 import { startMockProvider, type MockProvider } from "./testing/mockProvider.js";
 
@@ -35,8 +36,8 @@ async function setup(o: { model: string; base: string; family?: string; override
   return { endpoint, model, thread };
 }
 
-async function upload(seed: number): Promise<AssetDto> {
-  const res = await ctx.req("/api/assets", { method: "POST", body: makePng(seed), headers: { "content-type": "application/octet-stream" } });
+async function upload(seed: number, size?: number): Promise<AssetDto> {
+  const res = await ctx.req("/api/assets", { method: "POST", body: makePng(seed, size), headers: { "content-type": "application/octet-stream" } });
   return (await res.json()) as AssetDto;
 }
 
@@ -147,6 +148,110 @@ describe("edit", () => {
     expect(String(req.body!.image)).toContain(makePng(7).toString("base64").slice(0, 60));
     expect(assistant.notes.join(" ")).toContain("hanya menerima satu gambar input");
     expect(assistant.image!.references).toEqual([]);
+  });
+
+  it("venice: ratio and tier come from the target, and the result is resized to its exact size", async () => {
+    const { thread, model } = await setup({ model: "qwen-edit", base: "/venice/api/v1", family: "venice" });
+    const target = await upload(12, 64);
+    const { assistant, done } = await edit(thread.id, { text: "x", modelId: model.id, target: target.id });
+    expect(done.status).toBe("complete");
+    const body = mock.requests.find((r) => r.path.endsWith("/image/edit"))!.body!;
+    expect(body.aspect_ratio).toBe("auto");
+    expect(body.resolution).toBe("1K");
+    const bytes = Buffer.from(await (await ctx.req(`/api/assets/${imageIds(assistant)[0]}`)).arrayBuffer());
+    expect(sniffImage(bytes)).toMatchObject({ width: 64, height: 64 });
+    expect(assistant.notes.join(" ")).toContain("48x48, diubah ke 64x64");
+  });
+
+  it("venice: with the size switch off the provider size is kept", async () => {
+    const { thread, model } = await setup({ model: "qwen-edit", base: "/venice/api/v1", family: "venice" });
+    const target = await upload(13, 64);
+    const { assistant } = await edit(thread.id, { text: "x", modelId: model.id, target: target.id, params: { matchTarget: false } });
+    const bytes = Buffer.from(await (await ctx.req(`/api/assets/${imageIds(assistant)[0]}`)).arrayBuffer());
+    expect(sniffImage(bytes)).toMatchObject({ width: 48, height: 48 });
+    expect(mock.requests.find((r) => r.path.endsWith("/image/edit"))!.body!.resolution).toBeUndefined();
+  });
+
+  it("venice: test connection discovers edit models, and they edit with no resolution they do not list", async () => {
+    const endpoint = await ctx.json<EndpointDto>(
+      "/api/endpoints",
+      post({ name: "Venice", presetId: "venice", protocol: "openai-chat", baseUrl: `${mock.url}/venice/api/v1`, auth: { type: "bearer" }, apiKey: "sk-test-venice-0001" }),
+    );
+    const test = await ctx.json<{ ok: boolean }>(`/api/endpoints/${endpoint.id}/test`, post({}));
+    expect(test.ok).toBe(true);
+    const all = (await ctx.json<ModelListResponse>("/api/models")).models.filter((m) => m.endpointId === endpoint.id);
+    const byId = Object.fromEntries(all.map((m) => [m.modelId, m]));
+    expect(byId["qwen-edit"]).toMatchObject({ kind: "image", summary: { imageInputs: 1, editOnly: true } });
+    expect(byId["flux-gen"]).toMatchObject({ kind: "image", summary: { imageInputs: 0, editOnly: false } });
+    expect(byId["venice-text"]?.kind).toBe("text");
+
+    const thread = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "edit", modelId: byId["qwen-edit"]!.id }));
+    const target = await upload(14, 64);
+    const { assistant, done } = await edit(thread.id, { text: "make it dusk", modelId: byId["qwen-edit"]!.id, target: target.id });
+    expect(done.status).toBe("complete");
+    const body = mock.requests.find((r) => r.path.endsWith("/image/edit"))!.body!;
+    expect(body).toMatchObject({ model: "qwen-edit", aspect_ratio: "auto" });
+    expect(body).not.toHaveProperty("resolution");
+    const bytes = Buffer.from(await (await ctx.req(`/api/assets/${imageIds(assistant)[0]}`)).arrayBuffer());
+    expect(sniffImage(bytes)).toMatchObject({ width: 64, height: 64 });
+
+    // A generation-only model cannot edit.
+    const res = await ctx.req(`/api/threads/${thread.id}/edits`, post({ text: "x", modelId: byId["flux-gen"]!.id, target: target.id }));
+    expect(res.status).toBe(400);
+  });
+
+  it("on start, a model list made by an older discovery is reloaded once", async () => {
+    const endpoint = await ctx.json<EndpointDto>(
+      "/api/endpoints",
+      post({ name: "Venice", presetId: "venice", protocol: "openai-chat", baseUrl: `${mock.url}/venice/api/v1`, auth: { type: "bearer" }, apiKey: "sk-test-venice-0001" }),
+    );
+    await ctx.json(`/api/endpoints/${endpoint.id}/test`, post({}));
+    // Pretend the list came from the old discovery: only the text model, and no version stored.
+    const { models: modelsTable, settings: settingsTable } = await import("./db/schema.js");
+    const { and, eq, ne } = await import("drizzle-orm");
+    const db = ctx.opened.db;
+    db.delete(modelsTable).where(and(eq(modelsTable.endpointId, endpoint.id), ne(modelsTable.modelId, "venice-text"))).run();
+    db.delete(settingsTable).where(eq(settingsTable.key, "_discoveryVersion")).run();
+
+    expect(await ctx.services.registry.refreshStaleDiscovery()).toBe(1);
+    const ids = (await ctx.json<ModelListResponse>("/api/models")).models.filter((m) => m.endpointId === endpoint.id).map((m) => m.modelId).sort();
+    expect(ids).toEqual(["flux-gen", "krea-gen", "nano-edit", "qwen-edit", "venice-text"]);
+    // Once is enough.
+    expect(await ctx.services.registry.refreshStaleDiscovery()).toBe(0);
+  });
+
+  it("venice: an edit with references goes to /image/multi-edit, target first; generate sends style references", async () => {
+    const endpoint = await ctx.json<EndpointDto>(
+      "/api/endpoints",
+      post({ name: "Venice", presetId: "venice", protocol: "openai-chat", baseUrl: `${mock.url}/venice/api/v1`, auth: { type: "bearer" }, apiKey: "sk-test-venice-0001" }),
+    );
+    await ctx.json(`/api/endpoints/${endpoint.id}/test`, post({}));
+    const byId = Object.fromEntries((await ctx.json<ModelListResponse>("/api/models")).models.filter((m) => m.endpointId === endpoint.id).map((m) => [m.modelId, m]));
+    expect(byId["nano-edit"]!.summary).toMatchObject({ imageInputs: 4, editOnly: true });
+    expect(byId["krea-gen"]!.summary).toMatchObject({ imageInputs: 3, editOnly: false });
+    expect(byId["qwen-edit"]!.summary.imageInputs).toBe(1); // combineImages false: one image only
+
+    const thread = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "edit", modelId: byId["nano-edit"]!.id }));
+    const [target, ref] = [await upload(15, 64), await upload(16)];
+    const { done, assistant } = await edit(thread.id, { text: "x", modelId: byId["nano-edit"]!.id, target: target.id, references: [{ assetId: ref.id, role: "style" }] });
+    expect(done.status).toBe("complete");
+    const body = mock.requests.find((r) => r.path.endsWith("/image/multi-edit"))!.body!;
+    expect(body).toMatchObject({ modelId: "nano-edit", aspect_ratio: "auto", resolution: "1K", safe_mode: false });
+    const images = body.images as string[];
+    expect(images).toHaveLength(2);
+    expect(images[0]).toBe(makePng(15, 64).toString("base64"));
+    expect(images[1]).toBe(makePng(16).toString("base64"));
+    expect(assistant.image!.references).toHaveLength(1);
+    expect(mock.requests.some((r) => r.path.endsWith("/image/edit"))).toBe(false);
+
+    // Generate with a style reference.
+    mock.requests.length = 0;
+    const gen = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "image", modelId: byId["krea-gen"]!.id }));
+    const res = await ctx.json<{ runId: string }>(`/api/threads/${gen.id}/images`, post({ text: "a cat", modelId: byId["krea-gen"]!.id, references: [{ assetId: ref.id }], params: { n: 2 } }));
+    await collectRun(ctx, res.runId);
+    const g = mock.requests.find((r) => r.path.endsWith("/image/generate"))!.body!;
+    expect(g).toMatchObject({ model: "krea-gen", variants: 2, safe_mode: false });
+    expect(g.style_references).toEqual([{ image: makePng(16).toString("base64") }]);
   });
 
   it("a model that takes no input images cannot edit, and the request never leaves", async () => {

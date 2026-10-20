@@ -1,5 +1,6 @@
 import type {
   ApprovalRuleDto,
+  ModelDto,
   CheckpointListResponse,
   MemoryListResponse,
   WebSearchStatus,
@@ -67,6 +68,15 @@ export function useInvalidateRegistry() {
     void qc.invalidateQueries({ queryKey: keys.settings });
   };
 }
+
+/** Text models answer in Chat. */
+export const canChat = (m: ModelDto): boolean => m.kind === "text";
+/** The Agent loop runs on tool calls, so a model without tools cannot work there. */
+export const canAgent = (m: ModelDto): boolean => m.kind === "text" && m.summary.tools;
+/** Image models that take an input image, so Edit can use them. */
+export const canEdit = (m: ModelDto): boolean => (m.summary.imageInputs ?? 0) > 0;
+/** Image models that can start from text; edit-only models need an input image. */
+export const canGenerate = (m: ModelDto): boolean => !m.summary.editOnly;
 
 export function modelLabel(m: { alias: string | null; name: string; modelId: string }): string {
   return m.alias ?? (m.name !== m.modelId ? m.name : m.modelId);

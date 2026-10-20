@@ -95,11 +95,23 @@ export function handleImageRoute(ctx: ImageMockCtx): boolean {
     json(res, 200, { id: "generate-1", images: Array.from({ length: n }, (_, i) => b64(counter++ + i)) });
     return true;
   }
-  if (method === "POST" && path === "/venice/api/v1/image/edit") {
+  if (method === "POST" && path === "/venice/api/v1/image/multi-edit") {
     if (failing(ctx)) return rejected(ctx), true;
     const png = makePng(counter++);
     res.writeHead(200, { "content-type": "image/png", "content-length": String(png.length) });
     res.end(png);
+    return true;
+  }
+  if (method === "POST" && path === "/venice/api/v1/image/edit") {
+    if (failing(ctx)) return rejected(ctx), true;
+    const png = makePng(counter++);
+    const send = () => {
+      res.writeHead(200, { "content-type": "image/png", "content-length": String(png.length) });
+      res.end(png);
+    };
+    // "[slow]" in the prompt holds the answer back, so a loader can be looked at in the browser.
+    if (String(body?.prompt ?? "").includes("[slow]")) setTimeout(send, 8000);
+    else send();
     return true;
   }
 

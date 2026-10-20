@@ -17,7 +17,8 @@ import { messages } from "./db/schema.js";
 import { callModel, newAccumulator } from "./provider/call.js";
 import { generateImages, type GeneratedImage, type ImageRef } from "./provider/image.js";
 import type { AssetService } from "./services/assets.js";
-import { toDataUrl } from "./services/imageInfo.js";
+import { sniffImage, toDataUrl } from "./services/imageInfo.js";
+import { matchSize, tierFor } from "./services/resize.js";
 
 export interface ImageRunDeps extends AgentDeps {
   assets: AssetService;
@@ -128,6 +129,9 @@ export async function runImage(
     const lastResult = [...prior].reverse().find((t) => t.resultAssetIds.length > 0)?.resultAssetIds[0] ?? null;
 
     const isEdit = !!input.edit;
+    if (!isEdit && spec.editOnly && input.references.length === 0) {
+      throw new Error("Model ini khusus edit gambar dan butuh gambar input. Pakai di mode Edit, atau tambahkan gambar referensi.");
+    }
     if (isEdit && spec.maxInputImages < 1) {
       throw new Error("Model ini tidak menerima gambar input, jadi tidak bisa mengedit gambar. Pilih model gambar yang mendukung edit, atau ganti jalurnya di Pengaturan.");
     }
@@ -242,6 +246,14 @@ export async function runImage(
       }
     }
 
+    /* ---- size: an edit comes back at the size of the image being edited ---- */
+    const targetSize = targetFile ? sniffImage(targetFile.bytes) : null;
+    const matchTo = input.edit && input.params.matchTarget !== false && targetSize?.width && targetSize.height ? { width: targetSize.width, height: targetSize.height } : null;
+    const callParams = { ...resolved.params };
+    if (matchTo && wire === "venice-image" && !callParams.resolution && spec.resolutions.length > 0) {
+      callParams.resolution = tierFor(Math.max(matchTo.width, matchTo.height), spec.resolutions);
+    }
+
     /* ---- slots ---- */
     for (let i = 0; i < resolved.n; i++) handle.emit({ type: "image_slot", index: i, status: "queued" });
     const meta: ImageTurnMeta = {
@@ -249,7 +261,7 @@ export async function runImage(
       prompt: input.text,
       sentPrompt,
       composed,
-      params: resolved.params,
+      params: callParams,
       references: refEntries.map((e) => ({ assetId: e.ref.assetId, ...(e.ref.role ? { role: e.ref.role } : {}) })),
       n: resolved.n,
       ...(input.edit ? { target: input.edit.target, keep: input.edit.keep } : {}),
@@ -258,14 +270,23 @@ export async function runImage(
     const result = await generateImages(deps, {
       modelRowId: input.modelRowId,
       prompt: sentPrompt,
-      params: resolved.params,
+      params: callParams,
       n: resolved.n,
       references: inputFiles,
+      edit: isEdit,
       ...(chat ? { chat } : {}),
       logMessageId: input.assistantMessageId,
       signal: handle.signal,
-      onImage: (i, image: GeneratedImage) => {
-        const id = assets.save(image.bytes, "generated").id;
+      onImage: async (i, image: GeneratedImage) => {
+        let bytes = image.bytes;
+        if (matchTo) {
+          const fixed = await matchSize(bytes, matchTo.width, matchTo.height);
+          if (fixed) {
+            bytes = fixed.bytes;
+            note(`Hasil provider berukuran ${fixed.from.width}x${fixed.from.height}, diubah ke ${matchTo.width}x${matchTo.height} agar sama dengan gambar yang diedit.`);
+          }
+        }
+        const id = assets.save(bytes, "generated").id;
         saved.set(i, id);
         return id;
       },

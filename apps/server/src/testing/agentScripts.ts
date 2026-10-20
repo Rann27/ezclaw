@@ -28,6 +28,11 @@ export const SCRIPTS: Record<string, Script> = {
   "agent-write": ({ step }) => (step === 0 ? [{ tool: "write_file", args: { path: "baru/catatan.txt", content: "halo dunia\n" } }] : done("File dibuat.")),
   "agent-write-outside": ({ step }) => (step === 0 ? [{ tool: "write_file", args: { path: "../keluar.txt", content: "bocor" } }] : done("Selesai.")),
   "agent-shell": ({ step }) => (step === 0 ? [{ tool: "shell", args: { command: "echo halo-dari-shell" } }] : done("Perintah dijalankan.")),
+  // Long command and an output with no spaces: checks that the timeline wraps instead of scrolling sideways.
+  "agent-longline": ({ step }) =>
+    step === 0
+      ? [{ tool: "shell", args: { command: 'Write-Output ("_x000D__x000A_</S><S_S=Error>" * 30); Write-Output "G:/VeinoLN/[00] Queued/New Priority/[To First Prioritized - Oct]/[1ST Priority]/Classmate o Produce Shite/1/Produce Shite 1 EN/Illustrations/very-long-file-name-without-any-spaces-at-all.png"' } }]
+      : done("Selesai. " + "panjang_tanpa_spasi_".repeat(20)),
   "agent-shell-chain": ({ step }) => (step === 0 ? [{ tool: "shell", args: { command: "echo satu; echo dua" } }] : done("Selesai.")),
   "agent-danger": ({ step }) => (step === 0 ? [{ tool: "shell", args: { command: "Remove-Item -Recurse -Force ./sampah" } }] : done("Selesai.")),
   "agent-plan": ({ step }) =>

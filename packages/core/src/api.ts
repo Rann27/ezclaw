@@ -60,6 +60,10 @@ export interface HealthResponse {
   dbPath: string;
   startedAt: string;
   secretStore: { backend: "keyring" | "file" | "memory"; secure: boolean; detail: string };
+  /** True when the server code on disk was rebuilt after this process started, so a restart is due. */
+  stale: boolean;
+  /** Path of the page's main script in the latest web build on disk; a page running another one is out of date. */
+  webEntry: string | null;
 }
 
 export interface ThreadSummary {

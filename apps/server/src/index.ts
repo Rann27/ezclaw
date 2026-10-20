@@ -19,6 +19,10 @@ function main() {
   const secrets = createSecretStore(config.dataDir, config.secretStore);
   const services = createServices({ db, secrets, assetsDir: join(config.dataDir, "assets") });
   services.chat.recover();
+  void services.registry
+    .refreshStaleDiscovery()
+    .then((n) => n > 0 && console.log(`[server] Daftar model ${n} endpoint dimuat ulang (cara discovery diperbarui).`))
+    .catch((err) => console.error("[server] Gagal memuat ulang daftar model:", err));
   const app = createApp({ config, db, dbPath: file, startedAt: new Date(), services });
 
   const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {

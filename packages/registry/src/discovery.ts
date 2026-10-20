@@ -23,7 +23,11 @@ export interface DiscoveredModel {
 
 /** Path of the model list, relative to the endpoint base URL. */
 export function listPath(parser: DiscoveryParser): string {
-  return parser === "anthropic" ? "/v1/models?limit=1000" : "/models";
+  // Venice and OpenRouter list only text models unless asked; image and edit models are what Image and Edit need.
+  if (parser === "anthropic") return "/v1/models?limit=1000";
+  if (parser === "venice") return "/models?type=all";
+  if (parser === "openrouter") return "/models?output_modalities=text,image";
+  return "/models";
 }
 
 type Json = Record<string, unknown>;
@@ -77,8 +81,13 @@ function parseOpenAI(item: Json): DiscoveredModel | null {
   if (!raw) return null;
   // Gemini's compatibility layer prefixes ids with "models/".
   const modelId = raw.replace(/^models\//, "");
-  return { modelId, name: modelId, kind: "text", patch: {}, meta: {} };
+  // A plain list says nothing about output, so drawing models are told apart by name. Wrong guesses
+  // can be flipped in Settings, Model.
+  const kind = IMAGE_MODEL_NAME.test(modelId) ? "image" : "text";
+  return { modelId, name: modelId, kind, patch: {}, meta: {} };
 }
+
+const IMAGE_MODEL_NAME = /(gpt-image|dall-e|imagen|flux|seedream|seededit|stable-diffusion|sdxl|ideogram|recraft|qwen-image|wanx|image-(?:gen|edit|preview)|-image(?:-|$)|cogview|kolors|hidream)/i;
 
 const OPENROUTER_EFFORTS = ["minimal", "low", "medium", "high", "xhigh"];
 const OPENROUTER_BUDGET_PREFIXES = ["anthropic/", "google/", "qwen/"];
@@ -133,7 +142,8 @@ function parseOpenRouter(item: Json): DiscoveredModel | null {
     patch.reasoning = { style: "none" };
   }
 
-  const isImageOut = output.includes("image") && !output.includes("text");
+  // Models that can draw belong to Image and Edit, even when they also answer in text.
+  const isImageOut = output.includes("image");
   return {
     modelId,
     name: asString(item.name) ?? modelId,
@@ -146,17 +156,59 @@ function parseOpenRouter(item: Json): DiscoveredModel | null {
 function parseVenice(item: Json): DiscoveredModel | null {
   const modelId = asString(item.id);
   const type = asString(item.type);
-  if (!modelId || (type !== "text" && type !== "image")) return null;
+  if (!modelId || (type !== "text" && type !== "image" && type !== "inpaint")) return null;
   const spec = asRecord(item.model_spec);
   const name = asString(spec?.name) ?? modelId;
   const meta: Record<string, unknown> = { constraints: spec?.constraints ?? null, pricing: spec?.pricing ?? null };
 
-  if (type === "image") {
+  if (type === "image" || type === "inpaint") {
+    const c = asRecord(spec?.constraints);
+    const strings = (v: unknown) => asArray(v).filter((x): x is string => typeof x === "string");
+    const ratios = strings(c?.aspectRatios);
+    const tiers = strings(c?.resolutions);
+    const qualities = strings(c?.qualities);
+    const listed = {
+      ...(ratios.length ? { aspectRatios: ratios } : {}),
+      ...(tiers.length ? { resolutions: tiers } : {}),
+      ...(qualities.length ? { qualities } : {}),
+    };
+    if (type === "inpaint") {
+      // One image goes to /image/edit, several to /image/multi-edit (first one is edited). Venice's
+      // spec: a missing maxInputImages means 3, or 1 when the model cannot combine images.
+      const maxInputs = asNumber(c?.maxInputImages) ?? (c?.combineImages === false ? 1 : 3);
+      return {
+        modelId,
+        name,
+        kind: "image",
+        patch: {
+          inputModalities: ["text", "image"],
+          outputModalities: ["image"],
+          tools: false,
+          // Lists are taken as given (even empty), so a model without tiers never gets a resolution it rejects.
+          image: { wire: "venice-image", editOnly: true, maxInputImages: maxInputs, negativePrompt: false, seed: false, steps: null, guidance: null, ...listed, resolutions: tiers, qualities },
+        },
+        meta,
+      };
+    }
+    // /image/generate takes no input image, except style references on models that list a limit.
+    const steps = asRecord(c?.steps);
+    const styleRefs = asNumber(c?.maxStyleReferences) ?? 0;
+    const maxSteps = asNumber(steps?.max);
     return {
       modelId,
       name,
       kind: "image",
-      patch: { inputModalities: ["text"], outputModalities: ["image"], tools: false },
+      patch: {
+        inputModalities: ["text"],
+        outputModalities: ["image"],
+        tools: false,
+        image: {
+          wire: "venice-image",
+          maxInputImages: styleRefs,
+          ...listed,
+          ...(maxSteps ? { steps: { min: 1, max: maxSteps, step: 1, ...(asNumber(steps?.default) !== null ? { default: asNumber(steps?.default)! } : {}) } } : {}),
+        },
+      },
       meta,
     };
   }

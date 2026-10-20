@@ -99,6 +99,16 @@ export async function startMockProvider(port = 0): Promise<MockProvider> {
     if (req.method === "GET" && path === "/v1/models") {
       return json(200, { object: "list", data: [{ id: "echo" }, { id: "think" }, { id: "tags" }, { id: "reject-top_p" }, { id: "slow" }, { id: "midfail" }, { id: "markdown" }, { id: "composer-json" }, ...Object.keys(SCRIPTS).map((id) => ({ id }))] });
     }
+    if (req.method === "GET" && path === "/venice/api/v1/models") {
+      // Like Venice: without ?type=all only text models come back.
+      const all = (req.url ?? "").includes("type=all");
+      const text = { id: "venice-text", type: "text", model_spec: { name: "Venice Text", capabilities: {} } };
+      const edit = { id: "qwen-edit", type: "inpaint", model_spec: { name: "Qwen Edit", constraints: { aspectRatios: ["auto", "1:1", "16:9"], promptCharacterLimit: 1500, combineImages: false } } };
+      const gen = { id: "flux-gen", type: "image", model_spec: { name: "Flux", constraints: { promptCharacterLimit: 1500, steps: { default: 20, max: 30 }, widthHeightDivisor: 16 } } };
+      const multi = { id: "nano-edit", type: "inpaint", model_spec: { name: "Nano Edit", constraints: { aspectRatios: ["auto", "1:1"], promptCharacterLimit: 1500, combineImages: true, maxInputImages: 4, resolutions: ["1K", "2K"] } } };
+      const styled = { id: "krea-gen", type: "image", model_spec: { name: "Krea", constraints: { promptCharacterLimit: 1500, steps: { default: 20, max: 30 }, widthHeightDivisor: 16, maxStyleReferences: 3, supportsStyleReferenceStrength: true } } };
+      return json(200, { object: "list", type: all ? "all" : "text", data: all ? [text, edit, gen, multi, styled] : [text] });
+    }
     if (req.method === "GET" && path === "/v1/models-401") return json(401, { error: { message: "Invalid API key" } });
     if (req.method === "GET" && path === "/anthropic/v1/models") {
       return json(200, { data: [{ id: "claude-sonnet-5-5", display_name: "Claude Sonnet 5.5", capabilities: { thinking: { supported: true, types: { adaptive: { supported: true }, disabled: { supported: true } } }, effort: { low: { supported: true }, high: { supported: true } } } }], has_more: false });

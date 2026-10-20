@@ -7,6 +7,7 @@ import {
   openaiImagesGenerateBody,
   openrouterImagesBody,
   veniceEditBody,
+  veniceMultiEditBody,
   veniceGenerateBody,
   type ChatImageMessage,
   type ImageBodyInput,
@@ -57,8 +58,10 @@ export interface ImageCallArgs {
   chat?: ChatImageMessage[];
   logMessageId: string;
   signal: AbortSignal;
+  /** True for an edit: the first reference is the image being changed, not a style guide. */
+  edit?: boolean;
   /** Called once per finished image; returns the id of the saved asset. */
-  onImage: (index: number, image: GeneratedImage) => string;
+  onImage: (index: number, image: GeneratedImage) => string | Promise<string>;
   onSlot: (index: number, status: "running" | "done" | "error", extra?: { seed?: number; error?: string; assetId?: string }) => void;
   onNote: (text: string) => void;
 }
@@ -227,9 +230,15 @@ async function openrouterImages(ctx: HttpCtx, body: ImageBodyInput): Promise<Buf
   return Promise.all(items.map((it) => fromB64OrUrl(ctx, it)));
 }
 
-async function venice(ctx: HttpCtx, body: ImageBodyInput, hasRef: boolean): Promise<Buffer[]> {
-  if (hasRef) {
-    const res = await send(ctx, "POST", joinUrl(ctx.conn.baseUrl, "/image/edit"), { json: veniceEditBody(body) });
+/**
+ * Venice. Editing: one input image goes to /image/edit, several to /image/multi-edit (first is edited).
+ * Both answer with the image bytes. Generating goes to /image/generate (JSON), with any references
+ * sent as style references.
+ */
+async function venice(ctx: HttpCtx, body: ImageBodyInput, editing: boolean): Promise<Buffer[]> {
+  if (editing) {
+    const multi = body.references.length > 1;
+    const res = await send(ctx, "POST", joinUrl(ctx.conn.baseUrl, multi ? "/image/multi-edit" : "/image/edit"), { json: multi ? veniceMultiEditBody(body) : veniceEditBody(body) });
     const type = res.headers.get("content-type") ?? "";
     if (/application\/json/i.test(type)) {
       const json = await readJson(res);
@@ -239,9 +248,18 @@ async function venice(ctx: HttpCtx, body: ImageBodyInput, hasRef: boolean): Prom
     }
     const buf = Buffer.from(await res.arrayBuffer());
     logResponse(res, JSON.stringify({ contentType: type, bytes: buf.length }));
+    if (res.headers.get("x-venice-is-blurred") === "true") {
+      ctx.args.onNote("Venice memburamkan hasil ini karena safe mode menilainya konten dewasa.");
+    }
+    if (res.headers.get("x-venice-is-content-violation") === "true") {
+      ctx.args.onNote("Venice menandai hasil ini melanggar kebijakan kontennya.");
+    }
     return [requireImage(buf, "Venice")];
   }
   const res = await send(ctx, "POST", joinUrl(ctx.conn.baseUrl, "/image/generate"), { json: veniceGenerateBody(body) });
+  if (res.headers.get("x-venice-is-blurred") === "true") {
+    ctx.args.onNote("Venice memburamkan hasil ini karena safe mode menilainya konten dewasa.");
+  }
   const json = await readJson(res);
   const images = asArray(json.images).filter((x): x is string => typeof x === "string");
   if (images.length === 0) throw new ProviderError("Jawaban Venice tidak berisi gambar.");
@@ -334,14 +352,16 @@ export async function generateImages(deps: ImageCallDeps, args: ImageCallArgs): 
   });
 
   // Wires that return only one image per request run one request per slot, in parallel.
-  const perSlot = wire === "dashscope-async" || wire === "chat-modalities" || (wire === "venice-image" && args.references.length > 0);
+  // Venice edits answer with one image per request; its generate takes `variants`.
+  const veniceEditing = wire === "venice-image" && args.references.length > 0 && (args.edit === true || spec.editOnly);
+  const perSlot = wire === "dashscope-async" || wire === "chat-modalities" || veniceEditing;
   const slots: SlotResult[] = Array.from({ length: args.n }, () => ({ ok: false as const, error: "Tidak dijalankan." }));
   let text = "";
 
-  const finishSlot = (i: number, image: Buffer, seed?: number) => {
+  const finishSlot = async (i: number, image: Buffer, seed?: number) => {
     const generated: GeneratedImage = { bytes: image, ...(seed !== undefined ? { seed } : {}) };
     slots[i] = { ok: true, image: generated };
-    const assetId = args.onImage(i, generated);
+    const assetId = await args.onImage(i, generated);
     args.onSlot(i, "done", { assetId, ...(seed !== undefined ? { seed } : {}) });
   };
   const failSlot = (i: number, err: unknown) => {
@@ -366,7 +386,7 @@ export async function generateImages(deps: ImageCallDeps, args: ImageCallArgs): 
             out = r.images;
             if (r.text && !text) text = r.text;
           }
-          finishSlot(i, out[0]!, seed);
+          await finishSlot(i, out[0]!, seed);
         } catch (err) {
           failSlot(i, err);
         }
@@ -383,7 +403,7 @@ export async function generateImages(deps: ImageCallDeps, args: ImageCallArgs): 
       if (out.length < args.n) args.onNote(`Provider hanya mengembalikan ${out.length} dari ${args.n} gambar.`);
       for (let i = 0; i < args.n; i++) {
         const img = out[i];
-        if (img) finishSlot(i, img, args.n === 1 ? args.params.seed : undefined);
+        if (img) await finishSlot(i, img, args.n === 1 ? args.params.seed : undefined);
         else failSlot(i, new ProviderError("Provider tidak mengembalikan gambar untuk slot ini."));
       }
     } catch (err) {

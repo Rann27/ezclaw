@@ -55,6 +55,7 @@ export function defaultImageSpec(wire: ImageWire): ImageSpec {
     steps: null,
     guidance: null,
     conversational: false,
+    editOnly: false,
   };
   switch (wire) {
     case "chat-modalities":
@@ -107,6 +108,13 @@ export const imageParamsSchema = z
     guidance: z.number().optional(),
     /** Let the Prompt Composer rewrite follow-ups into a standalone prompt. Default on for single-prompt models. */
     composer: z.boolean().optional(),
+    /**
+     * Venice: true lets Venice blur what it rates adult. Off unless asked: Venice still charges for a
+     * blurred image, so blurring by default only wastes credit.
+     */
+    safeMode: z.boolean().optional(),
+    /** Edit: resize every result to the exact size of the image being edited. Default on. */
+    matchTarget: z.boolean().optional(),
   })
   .strict();
 export type ImageParams = z.infer<typeof imageParamsSchema>;
@@ -200,6 +208,9 @@ export function resolveImageParams(spec: ImageSpec, params: ImageParams, referen
     if (spec.guidance) out.guidance = clamp(spec.guidance, params.guidance);
     else notes.push("Guidance tidak dikirim: model ini tidak punya parameter itu.");
   }
+
+  // Only Venice has the switch; other providers have no such parameter.
+  if (params.safeMode !== undefined && spec.wire === "venice-image") out.safeMode = params.safeMode;
 
   let n = params.n ?? 1;
   if (n > spec.maxN) {
@@ -335,6 +346,9 @@ export function openrouterImagesBody(i: ImageBodyInput): Record<string, unknown>
   };
 }
 
+const rawBase64 = (url: string) => url.replace(/^data:[^,]*;base64,/, "");
+
+/** Generate; references go as style references on the models that accept them. */
 export function veniceGenerateBody(i: ImageBodyInput): Record<string, unknown> {
   return {
     model: i.modelId,
@@ -347,6 +361,8 @@ export function veniceGenerateBody(i: ImageBodyInput): Record<string, unknown> {
     ...(i.params.seed !== undefined ? { seed: i.params.seed } : {}),
     ...(i.params.steps !== undefined ? { steps: i.params.steps } : {}),
     ...(i.params.guidance !== undefined ? { cfg_scale: i.params.guidance } : {}),
+    ...(i.references.length ? { style_references: i.references.map((url) => ({ image: rawBase64(url) })) } : {}),
+    safe_mode: i.params.safeMode === true,
   };
 }
 
@@ -355,10 +371,27 @@ export function veniceEditBody(i: ImageBodyInput): Record<string, unknown> {
   return {
     model: i.modelId,
     prompt: i.prompt,
-    image: i.references[0],
-    ...(i.params.aspectRatio ? { aspect_ratio: i.params.aspectRatio } : {}),
+    // Venice takes a plain base64 string or an http(s) URL, not a data: URL.
+    image: rawBase64(i.references[0] ?? ""),
+    // "auto" lets Venice take the ratio closest to the input image.
+    aspect_ratio: i.params.aspectRatio ?? "auto",
     ...(i.params.resolution ? { resolution: i.params.resolution } : {}),
     ...(i.params.format ? { output_format: i.params.format } : {}),
+    safe_mode: i.params.safeMode === true,
+  };
+}
+
+/** Several input images: the first is the one edited, the rest guide it. Note the field is `modelId` here. */
+export function veniceMultiEditBody(i: ImageBodyInput): Record<string, unknown> {
+  return {
+    modelId: i.modelId,
+    prompt: i.prompt,
+    images: i.references.map(rawBase64),
+    aspect_ratio: i.params.aspectRatio ?? "auto",
+    ...(i.params.resolution ? { resolution: i.params.resolution } : {}),
+    ...(i.params.quality ? { quality: i.params.quality } : {}),
+    ...(i.params.format ? { output_format: i.params.format } : {}),
+    safe_mode: i.params.safeMode === true,
   };
 }
 

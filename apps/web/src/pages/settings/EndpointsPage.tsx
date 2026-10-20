@@ -25,7 +25,10 @@ export function EndpointsPage() {
   const invalidate = useInvalidateRegistry();
 
   const test = useMutation({
-    mutationFn: (id: string) => api<EndpointTestResponse>(`/endpoints/${id}/test`, { method: "POST", body: JSON.stringify({}) }),
+    mutationFn: async (id: string) => ({
+      ...(await api<EndpointTestResponse>(`/endpoints/${id}/test`, { method: "POST", body: JSON.stringify({}) })),
+      at: new Date().toISOString(),
+    }),
     onSettled: invalidate,
   });
 
@@ -76,7 +79,15 @@ export function EndpointsPage() {
             key={ep.id}
             endpoint={ep}
             testing={test.isPending && test.variables === ep.id}
-            testResult={test.variables === ep.id && test.data ? test.data : null}
+            testResult={
+              test.variables !== ep.id || test.isPending
+                ? null
+                : test.data
+                  ? test.data
+                  : test.error
+                    ? { ok: false, message: test.error.message, at: new Date().toISOString() }
+                    : null
+            }
             highlight={justAdded === ep.id}
             onTest={() => test.mutate(ep.id)}
             onEdit={() => setDialog({ editing: ep })}
@@ -99,7 +110,7 @@ function EndpointCard({
 }: {
   endpoint: EndpointDto;
   testing: boolean;
-  testResult: EndpointTestResponse | null;
+  testResult: { ok: boolean; message: string; at: string } | null;
   highlight: boolean;
   onTest: () => void;
   onEdit: () => void;
@@ -120,9 +131,9 @@ function EndpointCard({
   const clearKey = useMutation({ mutationFn: () => api(`/endpoints/${ep.id}/key`, { method: "DELETE" }), onSuccess: invalidate });
 
   const status = testResult
-    ? { ok: testResult.ok, message: testResult.message, at: null as string | null }
+    ? { ok: testResult.ok, message: testResult.message, at: testResult.at, fresh: true }
     : ep.lastTest
-      ? { ok: ep.lastTest.ok, message: ep.lastTest.message, at: ep.lastTest.at }
+      ? { ok: ep.lastTest.ok, message: ep.lastTest.message, at: ep.lastTest.at, fresh: false }
       : null;
 
   return (
@@ -156,12 +167,16 @@ function EndpointCard({
         </div>
       </div>
 
-      {status && (
+      {status && !testing && (
         <p className={["flex items-start gap-2 rounded-sm px-3 py-2 text-dense", status.ok ? "bg-sunken text-fg-2" : "bg-danger-soft text-danger-text"].join(" ")} role={status.ok ? "status" : "alert"}>
           <span className={`node mt-1.5 ${status.ok ? "node-done" : "node-fail"}`} aria-hidden />
           <span>
             {status.message}
-            {status.at && <span className="block text-meta text-fg-3">Dicek {formatTime(status.at)}</span>}
+            {status.at && (
+              <span className="block text-meta text-fg-3">
+                {status.fresh ? "Baru saja dicek" : "Dicek"} {formatTime(status.at)}
+              </span>
+            )}
           </span>
         </p>
       )}

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MODE_INFO } from "../modes";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { ThreadList } from "./ThreadList";
+import { StaleServerBanner } from "./StaleServerBanner";
 
 const DESKTOP_QUERY = "(min-width: 768px)";
 
@@ -174,6 +175,7 @@ export function Shell() {
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <StaleServerBanner />
         <Outlet />
       </main>
     </div>

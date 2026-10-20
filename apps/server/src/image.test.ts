@@ -154,7 +154,7 @@ describe("generate", () => {
     expect(logs.logs[0]!.requestHeaders.authorization).toBe("[disembunyikan]");
   });
 
-  it("venice: generate with variants, and the edit endpoint when a reference is given", async () => {
+  it("venice: generate with variants, and references in Image mode go as style references", async () => {
     const { thread, model } = await setup({ model: "qwen-image", base: "/venice/api/v1", family: "venice" });
     const first = await run(thread.id, { text: "a fox", modelId: model.id, params: { n: 2, aspectRatio: "1:1", negativePrompt: "blur", seed: 7 } });
     expect(imageIds(first.assistant)).toHaveLength(2);
@@ -164,9 +164,10 @@ describe("generate", () => {
     const [a, b] = [await upload(5), await upload(6)];
     const second = await run(thread.id, { text: "make it blue", modelId: model.id, references: [{ assetId: a.id }, { assetId: b.id }], params: { composer: false } });
     expect(second.done.status).toBe("complete");
-    const edits = mock.requests.filter((r) => r.path.endsWith("/image/edit"));
-    expect(edits).toHaveLength(1);
-    expect(String(edits[0]!.body!.image)).toMatch(/^data:image\/png;base64,/);
+    expect(mock.requests.some((r) => r.path.endsWith("/image/edit"))).toBe(false);
+    const gen = mock.requests.find((r) => r.path.endsWith("/image/generate"))!.body!;
+    expect(gen.style_references).toHaveLength(1);
+    expect(String((gen.style_references as { image: string }[])[0]!.image)).toMatch(/^iVBORw0KGgo/);
     expect(second.assistant.notes.join(" ")).toContain("paling banyak 1 gambar referensi");
     expect(imageIds(second.assistant)).toHaveLength(1);
   });

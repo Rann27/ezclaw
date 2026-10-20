@@ -23,7 +23,7 @@ function matches(m: ModelDto, filter: Filter): boolean {
     case "reasoning":
       return m.summary.reasoning;
     case "image-in":
-      return m.summary.inputModalities.includes("image");
+      return m.kind === "image" ? (m.summary.imageInputs ?? 0) > 0 : m.summary.inputModalities.includes("image");
   }
 }
 
@@ -33,7 +33,8 @@ function CapTags({ m }: { m: ModelDto }) {
   const tags = [
     !imageModel && m.summary.tools && "tools",
     !imageModel && m.summary.reasoning && "reasoning",
-    m.summary.inputModalities.includes("image") && (imageModel ? "terima referensi" : "gambar"),
+    imageModel ? m.summary.editOnly && "khusus edit" : m.summary.inputModalities.includes("image") && "gambar",
+    imageModel && !m.summary.editOnly && (m.summary.imageInputs ?? 0) > 0 && "terima referensi",
   ].filter(Boolean) as string[];
   if (!tags.length) return null;
   return (
@@ -54,9 +55,11 @@ interface PickerProps {
   onSelect: (model: ModelDto) => void;
   /** Which kind of model the caller needs. */
   kind?: "text" | "image";
+  /** Narrows the list further, e.g. Edit shows only models that take an input image. */
+  accept?: (m: ModelDto) => boolean;
 }
 
-export function ModelPickerDialog({ open, onClose, selectedId, onSelect, kind = "text" }: PickerProps) {
+export function ModelPickerDialog({ open, onClose, selectedId, onSelect, kind = "text", accept }: PickerProps) {
   const { data, isPending, isError, error, refetch } = useModels();
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Set<Filter>>(new Set());
@@ -69,7 +72,7 @@ export function ModelPickerDialog({ open, onClose, selectedId, onSelect, kind = 
     }
   }, [open]);
 
-  const all = useMemo(() => (data?.models ?? []).filter((m) => m.kind === kind), [data, kind]);
+  const all = useMemo(() => (data?.models ?? []).filter((m) => m.kind === kind && (!accept || accept(m))), [data, kind, accept]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();

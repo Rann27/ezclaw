@@ -88,18 +88,27 @@ export type RunEvent =
   | { type: "done"; status: "complete" | "stopped" | "error"; finishReason?: FinishReason; error?: string; stopReason?: RunStopReason };
 
 export interface AgentLoopConfig {
+  /** Stop a run after `maxSteps` model calls. Off by default: the model ends the run itself, the owner can press Stop. */
+  limitSteps: boolean;
   maxSteps: number;
   /** Tool output longer than this many characters keeps its head and tail. */
   toolOutputLimit: number;
   /** Compact the conversation when the estimated context passes this share of the window. */
   compactAt: number;
+  /**
+   * Also compact once the context passes this many tokens, whatever the window. Long agent runs on
+   * million-token models would otherwise resend hundreds of thousands of tokens each step. Null: off.
+   */
+  compactAtTokens: number | null;
   shellTimeoutMs: number;
 }
 
 export const DEFAULT_LOOP: AgentLoopConfig = {
+  limitSteps: false,
   maxSteps: 60,
   toolOutputLimit: 40_000,
   compactAt: 0.8,
+  compactAtTokens: 150_000,
   shellTimeoutMs: 120_000,
 };
 
@@ -117,9 +126,11 @@ export const threadHarnessSchema = z.object({
 });
 
 const loopSchema = z.object({
+  limitSteps: z.boolean().default(false),
   maxSteps: z.number().int().min(1).max(500),
   toolOutputLimit: z.number().int().min(1000).max(400_000),
   compactAt: z.number().min(0.3).max(0.95),
+  compactAtTokens: z.number().int().min(10_000).max(2_000_000).nullable().default(150_000),
   shellTimeoutMs: z.number().int().min(1000).max(600_000),
 });
 

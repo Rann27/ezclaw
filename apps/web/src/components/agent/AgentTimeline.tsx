@@ -129,9 +129,9 @@ function ToolCallCard({
   }, [call.args]);
 
   return (
-    <div className="relative grid gap-2">
+    <div className="relative grid grid-cols-[minmax(0,1fr)] gap-2">
       <span className={`node ${NODE[call.status]} absolute top-3 -left-5`} aria-hidden />
-      <details open={open} className="rounded-sm border border-line bg-surface">
+      <details open={open} className="min-w-0 rounded-sm border border-line bg-surface">
         <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2 text-dense">
           <CaretRightIcon size={12} aria-hidden className="chev text-fg-3" />
           <code className="font-semibold">{call.name}</code>
@@ -247,7 +247,7 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
   const lastStepId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       {messages.map((m) => {
         if (m.role === "tool") return null;
         if (m.role === "user") {
@@ -306,11 +306,11 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
         const stopped = m.status === "stopped";
 
         return (
-          <article key={m.id} className="relative grid max-w-[var(--read-max)] gap-3 border-l border-line pl-5" aria-label="Langkah agent" aria-busy={streaming}>
+          <article key={m.id} className="relative grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 border-l border-line pl-5" aria-label="Langkah agent" aria-busy={streaming}>
             <span className={`node ${streaming ? "node-run" : failed ? "node-fail" : stopped ? "node-skip" : "node-done"} absolute top-2 -left-[4px]`} aria-hidden />
 
             {reasoning && (
-              <details open={streaming && !text && !calls.length} className="rounded-sm border border-line">
+              <details open={streaming && !text && !calls.length} className="min-w-0 rounded-sm border border-line">
                 <summary className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-dense text-fg-2">
                   {streaming && !text ? "Berpikir" : "Reasoning"}
                   <span className="text-fg-3">{reasoning.length} karakter</span>
@@ -332,7 +332,7 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
             )}
 
             {calls.length > 0 && (
-              <div className="grid gap-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
                 {calls.map((c) => (
                   <ToolCallCard key={c.callId} call={c} threadId={threadId} onDecide={onDecide} onAnswer={onAnswer} />
                 ))}

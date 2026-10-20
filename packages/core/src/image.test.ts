@@ -13,6 +13,7 @@ import {
   openrouterImagesBody,
   resolveImageParams,
   veniceEditBody,
+  veniceMultiEditBody,
   veniceGenerateBody,
 } from "./index.js";
 
@@ -91,7 +92,21 @@ describe("wire bodies", () => {
     const g = veniceGenerateBody({ ...base, params: { negativePrompt: "blur", guidance: 7, steps: 8 } });
     expect(g).toMatchObject({ variants: 2, negative_prompt: "blur", cfg_scale: 7, steps: 8 });
     expect(g).not.toHaveProperty("image");
-    expect(veniceEditBody({ ...base, params: { format: "png" } })).toEqual({ model: "m", prompt: "p", image: "data:image/png;base64,AA", output_format: "png" });
+    expect(veniceEditBody({ ...base, params: { format: "png" } })).toEqual({ model: "m", prompt: "p", image: "AA", aspect_ratio: "auto", output_format: "png", safe_mode: false });
+  });
+
+  it("venice safe mode: off unless asked for, and only sent to Venice", () => {
+    expect(veniceEditBody({ ...base, params: {} })).toMatchObject({ safe_mode: false });
+    expect(veniceGenerateBody({ ...base, params: {} })).toMatchObject({ safe_mode: false });
+    expect(veniceEditBody({ ...base, params: { safeMode: true } })).toMatchObject({ safe_mode: true });
+    expect(resolveImageParams(defaultImageSpec("venice-image"), { safeMode: true }, 0).params.safeMode).toBe(true);
+    expect(resolveImageParams(defaultImageSpec("openai-images"), { safeMode: true }, 0).params).not.toHaveProperty("safeMode");
+  });
+
+  it("venice multi-edit uses modelId and an images list, target first", () => {
+    const b = veniceMultiEditBody({ ...base, references: ["data:image/png;base64,AA", "data:image/png;base64,BB"], params: { resolution: "2K" } });
+    expect(b).toEqual({ modelId: "m", prompt: "p", images: ["AA", "BB"], aspect_ratio: "auto", resolution: "2K", safe_mode: false });
+    expect(veniceGenerateBody({ ...base, references: ["data:image/png;base64,CC"], params: {} }).style_references).toEqual([{ image: "CC" }]);
   });
 
   it("dashscope always asks for one image per task", () => {

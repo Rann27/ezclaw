@@ -49,7 +49,7 @@ const AGENT_TOOLS = [
   "propose_memory",
 ];
 
-const CHAT_LOOP = { ...DEFAULT_LOOP, maxSteps: 1 };
+const CHAT_LOOP = { ...DEFAULT_LOOP, limitSteps: true, maxSteps: 1 };
 
 /** Settings every built-in shares unless it says otherwise. */
 const PLAIN = { instructionsStyle: "ezclaw" as const, toolStyle: "ezclaw" as const, userTag: null };

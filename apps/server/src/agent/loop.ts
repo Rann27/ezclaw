@@ -251,7 +251,7 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
 
   for (let step = 1; ; step++) {
     if (run.signal.aborted) return { status: "stopped" };
-    if (step > loop.maxSteps) {
+    if (loop.limitSteps && step > loop.maxSteps) {
       const text = `Berhenti setelah ${loop.maxSteps} langkah (batas run). Kirim pesan lagi jika pekerjaan perlu dilanjutkan.`;
       insertMessage(db, { threadId: input.threadId, role: "assistant", parts: [{ type: "text", text }], status: "complete" });
       run.emit({ type: "note", text });
@@ -265,10 +265,12 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
     /* ---- keep the conversation inside the context window */
     let entries = loadHistoryEntries(db, input.threadId);
     const window = modelProfile.contextLength;
-    if (window) {
+    // Compact at the share of the window, or at the fixed token mark, whichever comes first.
+    const compactLimit = Math.min(window ? window * Math.min(loop.compactAt, 1 - RESERVED_FOR_REPLY) : Infinity, loop.compactAtTokens ?? Infinity);
+    if (Number.isFinite(compactLimit)) {
       const estimated = lastUsage ? (lastUsage.inputTokens ?? 0) + (lastUsage.outputTokens ?? 0) + sinceLastCall : estimateHistory(entries.map((e) => e.message), system);
-      run.emit({ type: "context", usedTokens: estimated, windowTokens: window });
-      if (estimated > window * Math.min(loop.compactAt, 1 - RESERVED_FOR_REPLY) && entries.length > 6) {
+      run.emit({ type: "context", usedTokens: estimated, windowTokens: window ?? null });
+      if (estimated > compactLimit && entries.length > 6) {
         if (await compactHistory(deps, run, input, entries, placeholder.id)) {
           entries = loadHistoryEntries(db, input.threadId);
           lastUsage = null;
