@@ -15,7 +15,7 @@ export const THEMES = ["system", "light", "dark"] as const;
 export const themeSchema = z.enum(THEMES);
 export type ThemePreference = z.infer<typeof themeSchema>;
 
-export const MODEL_ROLES = ["chat", "agent", "image", "edit", "composer", "title"] as const;
+export const MODEL_ROLES = ["chat", "agent", "image", "edit", "composer", "title", "vision"] as const;
 export const modelRoleSchema = z.enum(MODEL_ROLES);
 export type ModelRole = z.infer<typeof modelRoleSchema>;
 
@@ -26,6 +26,7 @@ export const MODEL_ROLE_LABELS: Record<ModelRole, string> = {
   edit: "Edit gambar",
   composer: "Prompt Composer",
   title: "Judul dan ringkasan",
+  vision: "Cadangan vision",
 };
 
 export const settingsSchema = z.object({
@@ -71,7 +72,29 @@ export interface ThreadSummary {
   mode: Mode;
   title: string;
   pinned: boolean;
+  /** Sidebar group, or null. */
+  group: string | null;
+  archived: boolean;
   updatedAt: string;
+}
+
+export interface SearchHit {
+  threadId: string;
+  mode: "chat" | "agent" | "image" | "edit";
+  title: string;
+  /** Where the words were found. */
+  in: "title" | "message";
+  messageId: string | null;
+  role: "user" | "assistant" | "tool" | null;
+  /** Text around the match; the match itself is between the marks. */
+  before: string;
+  match: string;
+  after: string;
+  updatedAt: string;
+}
+
+export interface SearchResponse {
+  hits: SearchHit[];
 }
 
 export interface ThreadListResponse {

@@ -1,5 +1,5 @@
 import type { ChatParams, MessageDto, ModelDto, SendMessageResponse, ThreadDetailDto, ThreadHarness } from "@ezclaw/core";
-import { ArrowDownIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, GlobeIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -13,7 +13,10 @@ import { Inspector } from "../components/chat/Inspector";
 import { AssistantMessage, UserMessage } from "../components/chat/MessageView";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
 import { useLiveRun } from "../components/chat/useLiveRun";
-import { canChat, keys, useEndpoints, useModels, useSettings, useThread } from "../lib/queries";
+import { AgentTimeline } from "../components/agent/AgentTimeline";
+import { useAgentRun } from "../components/agent/useAgentRun";
+import { useSlashItems } from "../components/chat/SlashMenu";
+import { canAgent, canChat, keys, useEndpoints, useModels, useSettings, useThread } from "../lib/queries";
 
 const LAST_MODEL_KEY = "ezclaw.lastModel";
 const WIDE = "(min-width: 1280px)";
@@ -46,6 +49,25 @@ function readLastModel(): string | null {
   }
 }
 
+const WEB_KEY = "ezclaw.chat.web";
+
+/** Whether the Web switch was on last time; a convenience only. */
+function readWebPref(): boolean {
+  try {
+    return localStorage.getItem(WEB_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveWebPref(on: boolean) {
+  try {
+    localStorage.setItem(WEB_KEY, on ? "1" : "0");
+  } catch {
+    // Only the remembered switch is lost.
+  }
+}
+
 function lastUserText(messages: MessageDto[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -70,8 +92,22 @@ export function ChatPage() {
   const models = useModels();
   const endpoints = useEndpoints();
   const settings = useSettings();
-  const { live: liveRaw, attach, stop } = useLiveRun(threadId, thread.data?.activeRun);
+  // A chat with MCP tools or skills runs through the agent loop: its steps show as a timeline.
+  const [toolRunThread, setToolRunThread] = useState<string | null>(null);
+  const savedMessages = thread.data?.messages;
+  const toolMode = useMemo(() => {
+    if (threadId && toolRunThread === threadId) return true;
+    const msgs = savedMessages ?? [];
+    if (msgs.some((m) => m.role === "tool" || m.parts.some((p) => p.type === "tool_call"))) return true;
+    const active = thread.data?.activeRun;
+    return !!active && msgs.some((m) => m.id === active.messageId && m.role === "user");
+  }, [savedMessages, thread.data?.activeRun, threadId, toolRunThread]);
+  const { live: liveRaw, attach, stop } = useLiveRun(threadId, toolMode ? null : thread.data?.activeRun);
   const live = liveRaw && liveRaw.threadId === threadId ? liveRaw : null;
+  const agentRun = useAgentRun(threadId, toolMode ? thread.data?.activeRun : null);
+  const attachTools = agentRun.attach;
+  const liveTools = agentRun.live && agentRun.live.threadId === threadId ? agentRun.live : null;
+  const slash = useSlashItems("chat");
 
   const [draft, setDraft] = useState<Draft>({ modelId: null, systemPrompt: "", params: {}, harness: CHAT_HARNESS });
   const userEdited = useRef(false);
@@ -83,6 +119,7 @@ export function ChatPage() {
   const [focusSignal, setFocusSignal] = useState(0);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [web, setWeb] = useState(readWebPref);
 
   /* ----------------------------------------------------- draft initialisation */
   const loadedThread = thread.data?.id;
@@ -126,10 +163,13 @@ export function ChatPage() {
   }, [draft, threadId]);
 
   /* ------------------------------------------------------------------ sending */
-  const running = !!live || !!thread.data?.activeRun;
+  // Web search runs through tools, so it needs a model that can call them.
+  const webUsable = !chosen || canAgent(chosen);
+  const webOn = web && webUsable;
+  const running = !!live || !!liveTools || !!thread.data?.activeRun;
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, attachments: string[] = []) => {
       setSendError(null);
       const modelId = chosen?.id;
       if (!modelId) throw new Error("Pilih model dulu.");
@@ -141,7 +181,7 @@ export function ChatPage() {
         }
         const res = await api<SendMessageResponse>(`/threads/${id}/messages`, {
           method: "POST",
-          body: JSON.stringify({ text, modelId, systemPrompt: draft.systemPrompt, params: draft.params }),
+          body: JSON.stringify({ text, modelId, systemPrompt: draft.systemPrompt, params: draft.params, ...(attachments.length ? { attachments } : {}), ...(webOn ? { web: true } : {}) }),
         });
         try {
           localStorage.setItem(LAST_MODEL_KEY, modelId);
@@ -150,7 +190,12 @@ export function ChatPage() {
         }
         const threadIdNow = id;
         await qc.fetchQuery({ queryKey: keys.thread(threadIdNow), queryFn: () => api<ThreadDetailDto>(`/threads/${threadIdNow}`), staleTime: 0 });
-        attach(res.runId, res.assistantMessageId ?? "", id);
+        if (res.queued) {
+          // Joins the run that is already working.
+        } else if (res.assistantMessageId === null) {
+          setToolRunThread(id);
+          attachTools(res.runId, id);
+        } else attach(res.runId, res.assistantMessageId, id);
         void qc.invalidateQueries({ queryKey: ["threads"] });
         if (!threadId) void navigate({ to: "/chat", search: { t: id } });
       } catch (err) {
@@ -158,7 +203,7 @@ export function ChatPage() {
         throw err;
       }
     },
-    [attach, chosen?.id, draft.params, draft.systemPrompt, navigate, qc, threadId],
+    [attachTools, attach, chosen?.id, draft.params, draft.systemPrompt, navigate, qc, threadId, webOn],
   );
 
   const retry = useCallback(() => {
@@ -187,7 +232,7 @@ export function ChatPage() {
   }, [threadId, scrollToEnd]);
   useEffect(() => {
     if (stick.current) scrollToEnd();
-  }, [live?.text, live?.reasoning, thread.data?.messages.length, scrollToEnd]);
+  }, [live?.text, live?.reasoning, liveTools?.text, liveTools?.approvals.length, thread.data?.messages.length, scrollToEnd]);
 
   /* ---------------------------------------------------------------- rendering */
   const endpoint = chosen ? endpoints.data?.endpoints.find((e) => e.id === chosen.endpointId) : undefined;
@@ -250,7 +295,22 @@ export function ChatPage() {
 
             {!threadId && messages.length === 0 && <EmptyState noEndpoints={noEndpoints} hasModel={!!chosen} />}
 
-            {messages.map((m) =>
+            {toolMode ? (
+              <AgentTimeline
+                messages={messages}
+                live={liveTools}
+                running={running}
+                onShowRequest={setLogFor}
+                onDecide={(id, d, r) => agentRun.decide(id, d, r)}
+                onAnswer={(id, a) => agentRun.answer(id, a)}
+                onRetry={retry}
+                canRetry={!running}
+                threadId={threadId ?? ""}
+                checkpoints={[]}
+                onUndo={() => {}}
+              />
+            ) : (
+              messages.map((m) =>
               m.role === "user" ? (
                 <UserMessage key={m.id} message={m} />
               ) : (
@@ -263,6 +323,7 @@ export function ChatPage() {
                   canRetry={m.id === lastAssistantId && !running}
                 />
               ),
+              )
             )}
           </div>
 
@@ -287,9 +348,28 @@ export function ChatPage() {
           running={running}
           keyMissing={keyMissing}
           onSend={send}
-          onStop={() => void stop()}
+          onStop={() => void (liveTools ? agentRun.stop() : stop())}
           error={sendError}
           focusSignal={focusSignal}
+          slash={slash}
+          attachments
+          midRun={toolMode}
+          extra={
+            <button
+              type="button"
+              className="chip-toggle inline-flex items-center gap-1"
+              aria-pressed={webOn}
+              disabled={!webUsable}
+              title={webUsable ? "Biarkan model mencari di web dan membaca halaman untuk pesan ini" : "Model ini tidak mendukung tools, jadi tidak bisa mencari di web"}
+              onClick={() => {
+                setWeb(!web);
+                saveWebPref(!web);
+              }}
+            >
+              <GlobeIcon size={16} aria-hidden />
+              Web
+            </button>
+          }
         />
       </section>
 

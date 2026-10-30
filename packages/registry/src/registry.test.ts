@@ -1,7 +1,7 @@
 import { buildChatRequest, resolveProfile, type ChatParams } from "@ezclaw/core";
 import { describe, expect, it } from "vitest";
 import { ENDPOINT_PRESETS, getEndpointPreset, profileFamily } from "./catalog.js";
-import { DiscoveryParseError, listPath, parseModelList } from "./discovery.js";
+import { DiscoveryParseError, enrichExperiential, listPath, parseModelList } from "./discovery.js";
 import { PRESET_FILES, matchPresets } from "./presets.js";
 
 const hello = [{ role: "user" as const, parts: [{ type: "text" as const, text: "halo" }] }];
@@ -317,5 +317,43 @@ describe("end to end: model id + provider rules -> wire body", () => {
     const req = request({ presetId: "custom", modelId: "whatever", params: { temperature: 0.7, reasoning: { mode: "on" } } });
     expect(req.body.temperature).toBe(0.7);
     expect(req.notes[0]).toContain("tidak punya kontrol reasoning");
+  });
+});
+
+describe("Experiential Labs discovery", () => {
+  const listed = parseModelList("experiential", {
+    data: [
+      { id: "claude-opus-5.5", object: "model", owned_by: "exp" },
+      { id: "text-embedding-3-small", object: "model" },
+      { id: "mystery-1", object: "model", uncensored: true },
+    ],
+  });
+  const catalog = [
+    {
+        model: { slug: "claude-opus-5.5", display_name: "Claude Opus 5.5", context_window: 1000000, max_input_tokens: 1000000, max_output_tokens: 128000, input_modalities: ["text", "image", "pdf"], output_modalities: ["text"], supported_params: { stop: true, tools: true, reasoning: true, temperature: true, structured_outputs: true }, maker: "Anthropic" },
+        providers: [{ input_nano_usd_per_million: 4000000000, output_nano_usd_per_million: 20000000000, capabilities: { supports_tools: true, minimum_temperature: 1, maximum_temperature: 1, supported_reasoning_efforts: ["low", "medium", "high", "xhigh", "max"], reasoning_default_effort: "medium", reasoning_default_enabled: true } }],
+      },
+  ];
+
+  it("lists ids from /v1/models and keeps embeddings out of Chat", () => {
+    expect(listed.map((m) => [m.modelId, m.kind])).toEqual([["claude-opus-5.5", "text"], ["text-embedding-3-small", "other"], ["mystery-1", "text"]]);
+    expect(listed[2]!.meta.uncensored).toBe(true);
+  });
+
+  it("fills context, inputs, tools, reasoning and pinned sampling from the catalog", () => {
+    const [opus, , mystery] = enrichExperiential(listed, catalog);
+    expect(opus!.name).toBe("Claude Opus 5.5");
+    expect(opus!.patch).toMatchObject({ contextLength: 1000000, maxOutputTokens: 128000, inputModalities: ["text", "image", "file"], tools: true, jsonMode: true });
+    expect(opus!.patch.reasoning).toMatchObject({ style: "openai-effort", canDisable: false, efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "medium" });
+    // Temperature is pinned at 1, so it is not sent; fields the gateway refuses are off.
+    expect(opus!.patch.sampling).toMatchObject({ temperature: null, frequency_penalty: null, presence_penalty: null });
+    expect(opus!.meta.pricing).toEqual({ inputPerMillion: 4, outputPerMillion: 20 });
+    // Not in the catalog: unchanged.
+    expect(mystery).toEqual(listed[2]);
+  });
+
+  it("has a preset on the documented host", () => {
+    expect(getEndpointPreset("experiential")).toMatchObject({ baseUrl: "https://api.experientiallabs.ai/v1", discovery: "experiential", auth: { type: "bearer" } });
+    expect(listPath("experiential")).toBe("/models");
   });
 });

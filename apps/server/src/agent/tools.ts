@@ -18,6 +18,8 @@ export interface ApprovalNeed {
   parsed?: ParsedCommand;
   /** Ask in every mode, whatever rules say. */
   alwaysAsk?: boolean;
+  /** What "allow always" remembers when it is not a command rule (an MCP tool, for example). */
+  onAllowAlways?: () => void;
 }
 
 export interface ToolOutcome {

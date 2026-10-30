@@ -8,6 +8,7 @@ const KIND_LABEL: Record<ApprovalRequest["kind"], string> = {
   edit: "Ubah file",
   outside: "Di luar workspace",
   web: "Akses internet",
+  mcp: "Tool MCP",
 };
 
 /** A unified diff with additions and removals marked by more than colour alone. */
@@ -82,6 +83,11 @@ export function ApprovalPanel({ approval, onDecide }: ApprovalProps) {
         </p>
       )}
       {request.diff && <DiffView diff={request.diff} />}
+      {request.kind === "mcp" && request.args && (
+        <pre className="m-0 max-h-60 overflow-auto rounded-sm border border-line bg-raised p-3 font-code text-dense whitespace-pre-wrap break-words" aria-label="Argumen tool">
+          {request.args}
+        </pre>
+      )}
 
       {denying ? (
         <div className="grid gap-2">
@@ -101,8 +107,13 @@ export function ApprovalPanel({ approval, onDecide }: ApprovalProps) {
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className="btn btn-approve" disabled={busy} onClick={() => void decide("allow")}>
-            {request.kind === "shell" ? "Izinkan perintah" : "Izinkan perubahan"}
+            {request.kind === "shell" ? "Izinkan perintah" : request.kind === "mcp" ? "Izinkan" : "Izinkan perubahan"}
           </button>
+          {request.kind === "mcp" && request.tool && (
+            <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void decide("allow_always")} title="Tool ini tidak akan ditanyakan lagi, di semua thread">
+              Selalu izinkan <code className="ml-1">{request.tool}</code>
+            </button>
+          )}
           {request.rulePattern && (
             <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void decide("allow_always")} title="Perintah yang diawali kata-kata ini tidak akan ditanyakan lagi di workspace ini">
               Selalu izinkan: <code className="ml-1">{request.rulePattern.join(" ")}</code>

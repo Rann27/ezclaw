@@ -1,0 +1,1 @@
+ALTER TABLE `threads` ADD `group_name` text;

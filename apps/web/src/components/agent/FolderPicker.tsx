@@ -5,11 +5,75 @@ import { useEffect, useId, useState, type FormEvent } from "react";
 import { api } from "../../api";
 import { Dialog } from "../Dialog";
 
+/** One Windows dialog at a time: a second request while one is open waits for the same answer. */
+let inflight: Promise<{ path: string | null }> | null = null;
+function askWindows(initial: string | null, title: string) {
+  inflight ??= api<{ path: string | null }>("/fs/pick-folder", { method: "POST", body: JSON.stringify({ initial, title }) }).finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
+type PickerProps = { open: boolean; onClose: () => void; initial: string | null; recent: string[]; onPick: (path: string) => void; title?: string };
+
 /**
- * Browses folders on this computer through the local server, since a browser page cannot get the full
- * path of a folder it picks. Only folder names are listed; file contents are never read here.
+ * Chooses a folder with the Windows dialog. A web page is never told a folder's real path, so the
+ * local server opens the dialog and returns the path. If the dialog cannot open (another system,
+ * or PowerShell is blocked), EZClaw's own folder browser takes over.
  */
-export function FolderPicker({ open, onClose, initial, recent, onPick, title = "Pilih folder workspace" }: { open: boolean; onClose: () => void; initial: string | null; recent: string[]; onPick: (path: string) => void; title?: string }) {
+export function FolderPicker(props: PickerProps) {
+  const { open, onClose, initial, onPick, title = "Pilih folder workspace" } = props;
+  const [phase, setPhase] = useState<"native" | "browser">("native");
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setPhase("native");
+    setNote(null);
+    let alive = true;
+    askWindows(initial, title)
+      .then((r) => {
+        if (!alive) return;
+        if (r.path) onPick(r.path);
+        else onClose();
+      })
+      .catch((err: Error) => {
+        if (!alive) return;
+        setNote(err.message);
+        setPhase("browser");
+      });
+    return () => {
+      alive = false;
+    };
+    // Open once per opening; the callbacks change identity on every render of the parent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  if (!open) return null;
+  if (phase === "native") {
+    return (
+      <Dialog open onClose={onClose} title={title} width="max-w-md">
+        <div className="grid gap-3">
+          <p className="flex items-center gap-2 text-body text-fg-2" role="status">
+            <span className="node node-run" aria-hidden />
+            Dialog folder Windows sudah terbuka. Pilih folder di jendela itu.
+          </p>
+          <p className="text-dense text-fg-3">Kalau jendelanya tidak terlihat, cek di belakang jendela browser atau di taskbar.</p>
+          <button type="button" className="btn btn-ghost justify-self-start" onClick={() => setPhase("browser")}>
+            Pakai penjelajah EZClaw saja
+          </button>
+        </div>
+      </Dialog>
+    );
+  }
+  return <FolderBrowser {...props} note={note} />;
+}
+
+/**
+ * EZClaw's own folder browser, listing folders through the local server. Used when the Windows
+ * dialog is not available. Only folder names are listed; file contents are never read here.
+ */
+function FolderBrowser({ open, onClose, initial, recent, onPick, title = "Pilih folder workspace", note = null }: PickerProps & { note?: string | null }) {
   const id = useId();
   const [path, setPath] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
@@ -79,9 +143,14 @@ export function FolderPicker({ open, onClose, initial, recent, onPick, title = "
         </>
       }
     >
-      <div className="grid gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 overflow-x-hidden">
+        {note && (
+          <p className="rounded-sm bg-sunken px-3 py-2 text-dense text-fg-2" role="status">
+            Dialog folder Windows tidak bisa dibuka ({note}), jadi pakai penjelajah EZClaw.
+          </p>
+        )}
         <form
-          className="flex gap-2"
+          className="flex min-w-0 gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (typed.trim()) go(typed.trim());
@@ -90,7 +159,7 @@ export function FolderPicker({ open, onClose, initial, recent, onPick, title = "
           <label htmlFor={`${id}-path`} className="sr-only">
             Path folder
           </label>
-          <input id={`${id}-path`} className="input flex-1 font-code" value={typed} placeholder="Ketik path lalu Enter, mis. F:\proyek" spellCheck={false} onChange={(e) => setTyped(e.target.value)} />
+          <input id={`${id}-path`} className="input min-w-0 flex-1 font-code" value={typed} placeholder="Ketik path lalu Enter, mis. F:\proyek" spellCheck={false} onChange={(e) => setTyped(e.target.value)} />
           <button type="submit" className="btn btn-secondary">
             Buka
           </button>
@@ -158,7 +227,7 @@ export function FolderPicker({ open, onClose, initial, recent, onPick, title = "
             {entries.length === 0 && <li className="px-2 py-3 text-dense text-fg-3">{current ? "Tidak ada subfolder di sini. Kamu tetap bisa memakai folder ini." : "Tidak ada drive yang terbaca."}</li>}
             {entries.map((e) => (
               <li key={e.path}>
-                <button type="button" className="flex min-h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-dense hover:bg-sunken" onClick={() => go(e.path)} onDoubleClick={() => onPick(e.path)}>
+                <button type="button" className="flex min-h-8 w-full min-w-0 items-center gap-2 rounded-sm px-2 text-left text-dense hover:bg-sunken" onClick={() => go(e.path)} onDoubleClick={() => onPick(e.path)}>
                   {current ? <FolderSimpleIcon size={16} aria-hidden className={e.hidden ? "text-fg-3" : "text-fg-2"} /> : <HardDrivesIcon size={16} aria-hidden />}
                   <span className={`truncate ${e.hidden ? "text-fg-3" : ""}`}>{e.name}</span>
                 </button>
@@ -181,9 +250,9 @@ export function FolderPicker({ open, onClose, initial, recent, onPick, title = "
             <ul className="grid gap-px">
               {recent.map((w) => (
                 <li key={w}>
-                  <button type="button" className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-dense hover:bg-sunken" onClick={() => go(w)}>
-                    <FolderSimpleIcon size={14} aria-hidden />
-                    <code className="truncate">{w}</code>
+                  <button type="button" className="flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-1 text-left text-dense hover:bg-sunken" title={w} onClick={() => go(w)}>
+                    <FolderSimpleIcon size={14} aria-hidden className="shrink-0" />
+                    <code className="min-w-0 truncate">{w}</code>
                   </button>
                 </li>
               ))}

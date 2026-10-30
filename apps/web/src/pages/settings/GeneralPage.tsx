@@ -31,6 +31,7 @@ const ROLE_NOTE: Record<ModelRole, string> = {
   edit: "Dipakai untuk Edit baru; kosong berarti ikut model Image.",
   composer: "Menyusun prompt gambar dan merapikan prompt edit.",
   title: "Judul dan ringkasan thread, mulai M2.",
+  vision: "Dipakai saat pesan Chat berisi gambar tetapi modelnya tidak menerima gambar. Kosong: dipilih otomatis dari model yang menerima gambar.",
 };
 
 const IMAGE_ROLES: ModelRole[] = ["image", "edit"];
@@ -138,7 +139,7 @@ function DefaultModels() {
     <div className="grid gap-4">
       {MODEL_ROLES.map((role) => {
         const kind = IMAGE_ROLES.includes(role) ? "image" : "text";
-        const options: ModelDto[] = all.filter((m) => m.kind === kind || (kind === "image" && m.summary.outputModalities.includes("image")));
+        const options: ModelDto[] = all.filter((m) => (role === "vision" ? m.kind === "text" && m.summary.inputModalities.includes("image") : m.kind === kind || (kind === "image" && m.summary.outputModalities.includes("image"))));
         return (
           <div key={role} className="grid gap-1 sm:grid-cols-[12rem_minmax(0,1fr)] sm:items-center sm:gap-4">
             <label htmlFor={`role-${role}`} className="text-ui font-semibold">
@@ -267,7 +268,7 @@ function WebSearchSettings() {
   return (
     <div className="grid gap-3">
       <p className="max-w-prose text-dense text-fg-3">
-        Tool <code>web_search</code> butuh layanan pencarian dengan API key-mu sendiri. Key disimpan di penyimpanan kredensial komputer ini. Tanpa ini, Agent tetap bisa membaca halaman yang alamatnya sudah diketahui lewat <code>web_fetch</code>.
+        Tanpa key, <code>web_search</code> memakai DuckDuckGo. Hasilnya cukup untuk pemakaian biasa, tapi DuckDuckGo kadang menolak pencarian otomatis yang terlalu sering. Untuk hasil yang lebih stabil, pasang key Brave, Tavily, atau Exa. Key disimpan di penyimpanan kredensial komputer ini. Kalau layanan itu gagal, pencarian jatuh ke DuckDuckGo.
       </p>
       {status.data?.provider && status.data.hasKey ? (
         <div className="flex flex-wrap items-center gap-2 text-dense">

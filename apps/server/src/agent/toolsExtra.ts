@@ -15,6 +15,8 @@ export interface ToolExtras {
   skills: Skill[];
   /** Saves an image file as an asset and shows it to the model with its next request. */
   attachImage(abs: string, display: string): { width: number | null; height: number | null };
+  /** Same for image bytes a tool received (an MCP result). Returns false when the model cannot see images. */
+  attachImageData?(bytes: Buffer, display: string): boolean;
   /** False when the model's profile does not accept image input. */
   modelSeesImages: boolean;
   /** Records a proposal for the owner to approve. */
@@ -24,6 +26,8 @@ export interface ToolExtras {
   search: ((query: string, count: number, signal: AbortSignal) => Promise<SearchResult[]>) | string;
   /** Runs a read-only helper agent on a question and returns its final report. */
   subagent(task: string, signal: AbortSignal): Promise<string>;
+  /** A skill was read; its MCP servers are started for the rest of the run. */
+  useSkill?(skill: Skill): void;
 }
 
 function ext(env: ToolEnv): ToolExtras {
@@ -257,7 +261,9 @@ export const readSkillTool = define(
       const x = ext(env);
       const skill = x.skills.find((s) => s.name.toLowerCase() === args.name.toLowerCase());
       if (!skill) return { output: `Skill "${args.name}" tidak ada. Yang tersedia: ${x.skills.map((s) => s.name).join(", ") || "(tidak ada)"}.`, isError: true };
-      return { output: readSkill(skill) };
+      x.useSkill?.(skill);
+      const mcpNote = skill.mcp.length ? `\n\n---\nTools dari MCP server ${skill.mcp.join(", ")} tersedia mulai langkah berikutnya (nama berawalan mcp__).` : "";
+      return { output: readSkill(skill) + mcpNote };
     },
   }),
 );

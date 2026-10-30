@@ -1,11 +1,12 @@
 import { MODES, type Mode } from "@ezclaw/core";
-import { GearSixIcon, ListIcon, XIcon } from "@phosphor-icons/react";
+import { GearSixIcon, ImagesIcon, ListIcon, MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MODE_INFO } from "../modes";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { ThreadList } from "./ThreadList";
 import { StaleServerBanner } from "./StaleServerBanner";
+import { SearchDialog } from "./SearchDialog";
 
 const DESKTOP_QUERY = "(min-width: 768px)";
 
@@ -42,6 +43,19 @@ export function Shell() {
   const menuButton = useRef<HTMLButtonElement>(null);
   const railRef = useRef<HTMLElement>(null);
   const navigate = useNavigate();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Ctrl+K (Cmd+K) opens search from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Close the drawer after navigating, and whenever the layout becomes desktop.
   useEffect(() => setDrawerOpen(false), [pathname, isDesktop]);
@@ -153,6 +167,30 @@ export function Shell() {
               );
             })}
           </ul>
+          <ul className="mt-2 grid gap-0.5 border-t border-line pt-2">
+            <li>
+              <Link
+                to="/library"
+                aria-current={pathname.startsWith("/library") ? "page" : undefined}
+                className={[
+                  "flex min-h-9 items-center gap-2 rounded-sm px-2 text-ui no-underline transition-colors duration-150",
+                  pathname.startsWith("/library") ? "bg-brand-soft font-semibold text-brand-soft-text" : "text-fg-2 hover:bg-sunken hover:text-fg",
+                ].join(" ")}
+              >
+                <ImagesIcon size={20} weight={pathname.startsWith("/library") ? "fill" : "regular"} aria-hidden />
+                <span className="flex-1">Library</span>
+              </Link>
+            </li>
+            <li>
+              <button type="button" className="flex min-h-9 w-full items-center gap-2 rounded-sm px-2 text-left text-ui text-fg-2 transition-colors duration-150 hover:bg-sunken hover:text-fg" onClick={() => setSearchOpen(true)}>
+                <MagnifyingGlassIcon size={20} aria-hidden />
+                <span className="flex-1">Cari</span>
+                <kbd className="text-meta text-fg-3" aria-label="Pintasan Ctrl K">
+                  Ctrl K
+                </kbd>
+              </button>
+            </li>
+          </ul>
         </nav>
 
         {currentMode && <ThreadList mode={currentMode} />}
@@ -173,6 +211,7 @@ export function Shell() {
           <ThemeSwitch compact />
         </div>
       </aside>
+      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         <StaleServerBanner />

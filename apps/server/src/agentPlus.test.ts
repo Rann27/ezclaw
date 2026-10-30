@@ -274,11 +274,31 @@ describe("new tools", () => {
     expect(finalText).not.toContain("menu");
   });
 
-  it("web_search says how to set it up when no service is configured", async () => {
-    const { model, thread } = await setup("agent-search");
-    const { events } = await run(thread.id, model.id);
-    expect(toolOutputs(events)[0]).toMatchObject({ ok: false });
-    expect(toolOutputs(events)[0]!.output).toContain("Pencarian web belum diatur");
+  it("web_search falls back to DuckDuckGo when no keyed service is set", async () => {
+    process.env.EZCLAW_DDG_URL = `${mock.url}/ddg`;
+    try {
+      const { model, thread } = await setup("agent-search");
+      const { events } = await run(thread.id, model.id);
+      expect(toolOutputs(events)[0]).toMatchObject({ ok: true });
+      const out = toolOutputs(events)[0]!.output;
+      expect(out).toContain("1. EZClaw Docs\n   https://ezclaw.dev/docs\n   Panduan & contoh");
+      expect(out).toContain("2. ezclaw repo");
+      expect(out).not.toContain("Iklan");
+    } finally {
+      delete process.env.EZCLAW_DDG_URL;
+    }
+  });
+
+  it("web_search explains when DuckDuckGo turns the search away", async () => {
+    process.env.EZCLAW_DDG_URL = `${mock.url}/ddg-blocked`;
+    try {
+      const { model, thread } = await setup("agent-search");
+      const { events } = await run(thread.id, model.id);
+      expect(toolOutputs(events)[0]).toMatchObject({ ok: false });
+      expect(toolOutputs(events)[0]!.output).toContain("DuckDuckGo menolak");
+    } finally {
+      delete process.env.EZCLAW_DDG_URL;
+    }
   });
 
   it("view_image shows the picture to a model that has vision, and refuses one that does not", async () => {

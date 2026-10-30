@@ -10,7 +10,7 @@ import type {
   RunStopReason,
   ThreadHarness,
 } from "@ezclaw/core";
-import { compactHistory, runAgent, type RunHandle } from "./agent/loop.js";
+import { compactHistory, runAgent, withImageData, type RunHandle } from "./agent/loop.js";
 import { loadHistoryEntries } from "./agent/store.js";
 import { touchThread, updateMessage } from "./agent/store.js";
 import type { Db } from "./db/client.js";
@@ -29,6 +29,8 @@ export interface ChatRunInput {
   system: string | undefined;
   params: ChatParams;
   history: CanonicalMessage[];
+  /** Shown at the start of the answer (for example, which model took over for images). */
+  note?: string;
 }
 
 export interface AgentRunStart {
@@ -36,11 +38,14 @@ export interface AgentRunStart {
   modelRowId: string;
   params: ChatParams;
   approvalMode: ApprovalMode;
-  workspace: string;
+  /** Null for a Chat thread that uses MCP tools or skills. */
+  workspace: string | null;
   harness: ThreadHarness;
   userPrompt: string;
   /** The user message that started this run. */
   startMessageId: string;
+  chat?: { system: string | undefined; developer: string[]; context: string; userTag: string | null; web?: boolean };
+  note?: string;
 }
 
 type Decision = { decision: "allow" | "allow_always" | "deny"; reason?: string };
@@ -59,6 +64,10 @@ interface ActiveRun {
   abort: AbortController;
   stopRequested: boolean;
   pendings: Map<string, Pending>;
+  /** Only agent-style runs take messages while they work. */
+  kind: "chat" | "agent" | "image";
+  /** Messages sent while the run works, waiting for the end of the current step. */
+  inbox: Part[][];
   /** Settles once the answer has been saved, so shutdown can wait for it. */
   finished: Promise<void>;
 }
@@ -93,7 +102,7 @@ export class RunManager {
     return run && !run.done ? { runId: run.id, messageId: run.messageId } : null;
   }
 
-  private create(threadId: string, messageId: string): ActiveRun {
+  private create(threadId: string, messageId: string, kind: ActiveRun["kind"] = "chat"): ActiveRun {
     const run: ActiveRun = {
       id: randomUUID(),
       threadId,
@@ -104,6 +113,8 @@ export class RunManager {
       abort: new AbortController(),
       stopRequested: false,
       pendings: new Map(),
+      kind,
+      inbox: [],
       finished: Promise.resolve(),
     };
     this.runs.set(run.id, run);
@@ -119,7 +130,7 @@ export class RunManager {
   }
 
   startAgent(input: AgentRunStart): string {
-    const run = this.create(input.threadId, input.startMessageId);
+    const run = this.create(input.threadId, input.startMessageId, "agent");
     run.finished = this.executeAgent(run, input);
     return run.id;
   }
@@ -127,6 +138,15 @@ export class RunManager {
   startImage(input: ImageRunInput): string {
     const run = this.create(input.threadId, input.assistantMessageId);
     run.finished = this.executeImage(run, input);
+    return run.id;
+  }
+
+  /** Queues a message for a working agent run. False when the thread's run cannot take one. */
+  enqueue(threadId: string, parts: Part[]): string | null {
+    const id = this.byThread.get(threadId);
+    const run = id ? this.runs.get(id) : undefined;
+    if (!run || run.done || run.kind !== "agent" || run.stopRequested) return null;
+    run.inbox.push(parts);
     return run.id;
   }
 
@@ -147,6 +167,7 @@ export class RunManager {
   /** Aborts every running response and waits until each partial answer is saved. Used on shutdown. */
   async stopAll(): Promise<void> {
     this.agent.processes.stopAll();
+    void this.agent.mcp.stopAll();
     const pending = [...this.runs.values()].filter((r) => !r.done);
     for (const run of pending) this.stop(run.id);
     await Promise.allSettled(pending.map((r) => r.finished));
@@ -208,6 +229,7 @@ export class RunManager {
     return {
       signal: run.abort.signal,
       emit: (event) => this.emit(run, event),
+      takeInbox: () => run.inbox.splice(0),
       approve: (request: ApprovalRequest, callId: string) =>
         new Promise<Decision>((resolve) => {
           const approvalId = randomUUID();
@@ -229,8 +251,12 @@ export class RunManager {
     let status: "complete" | "stopped" | "error" = "complete";
     let errorMessage: string | null = null;
 
+    if (input.note) {
+      acc.notes.push(input.note);
+      this.emit(run, { type: "note", text: input.note });
+    }
     try {
-      const history = await this.fitChatHistory(run, input);
+      const history = withImageData(await this.fitChatHistory(run, input), this.agent.assets);
       await callModel(
         this.agent,
         {
@@ -316,6 +342,7 @@ export class RunManager {
     let stopReason: RunStopReason | undefined;
     let finishReason: string | undefined;
 
+    if (input.note) this.emit(run, { type: "note", text: input.note });
     try {
       const result = await runAgent(this.agent, this.handle(run), {
         threadId: input.threadId,
@@ -326,6 +353,7 @@ export class RunManager {
         harness: input.harness,
         userPrompt: input.userPrompt,
         runMessageId: input.startMessageId,
+        ...(input.chat ? { chat: input.chat } : {}),
       });
       status = result.status;
       error = result.error;

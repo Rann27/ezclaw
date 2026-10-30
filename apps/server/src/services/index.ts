@@ -12,6 +12,8 @@ import { CheckpointService } from "./checkpoints.js";
 import { ImageService } from "./image.js";
 import { MemoryService } from "./memory.js";
 import { ProcessManager } from "../agent/processes.js";
+import { McpService } from "../mcp/service.js";
+import { SkillService } from "./skills.js";
 import { RegistryService } from "./registry.js";
 
 export interface Services {
@@ -26,6 +28,8 @@ export interface Services {
   checkpoints: CheckpointService;
   processes: ProcessManager;
   secrets: SecretStore;
+  mcp: McpService;
+  skills: SkillService;
 }
 
 /** `fetchImpl` is injectable so tests can point providers at a local mock server. */
@@ -37,6 +41,9 @@ export function createServices(opts: { db: Db; secrets: SecretStore; fetchImpl?:
   const memory = new MemoryService(opts.db);
   const assets = new AssetService(opts.db, opts.assetsDir);
   const processes = new ProcessManager();
+  const skillsDir = opts.skillsDir ?? join(opts.assetsDir, "..", "skills");
+  const mcp = new McpService(opts.db, opts.secrets, fetchImpl);
+  const skills = new SkillService(opts.db, skillsDir, () => getSettings(opts.db).skillDirs, () => mcp.list().map((s) => s.name), fetchImpl);
   const agentDeps: AgentDeps = {
     assets,
     processes,
@@ -48,12 +55,14 @@ export function createServices(opts: { db: Db; secrets: SecretStore; fetchImpl?:
     harness,
     memory,
     secrets: opts.secrets,
-    skillsDir: opts.skillsDir ?? join(opts.assetsDir, "..", "skills"),
+    skillsDir,
+    mcp,
+    skills,
     codexDir: () => getSettings(opts.db).codexDir,
   };
   const runs = new RunManager(opts.db, { ...agentDeps, ...(opts.imagePollMs ? { pollMs: opts.imagePollMs } : {}) });
-  const chat = new ChatService(opts.db, registry, runs, harness, () => getSettings(opts.db).codexDir, memory);
+  const chat = new ChatService(opts.db, registry, runs, harness, () => getSettings(opts.db).codexDir, memory, mcp, skills);
   const image = new ImageService(opts.db, registry, runs, assets);
   const checkpoints = new CheckpointService(opts.db, runs);
-  return { registry, runs, chat, assets, image, harness, rules, memory, checkpoints, processes, secrets: opts.secrets };
+  return { registry, runs, chat, assets, image, harness, rules, memory, checkpoints, processes, secrets: opts.secrets, mcp, skills };
 }

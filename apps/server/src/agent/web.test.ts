@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchPage, htmlToText, searchWeb } from "./web.js";
+import { fetchPage, htmlToText, parseDuckDuckGo, searchWeb } from "./web.js";
 
 const never = new AbortController().signal;
 
@@ -63,5 +63,23 @@ describe("searchWeb", () => {
   it("explains a rejected key", async () => {
     const f = fakeFetch(() => ({ status: 401, body: { error: "bad key" } }));
     await expect(searchWeb("brave", "K", "q", 1, never, f.fetch)).rejects.toThrow(/key ditolak/);
+  });
+});
+
+describe("parseDuckDuckGo", () => {
+  const page = '<div class="result result--ad "><a class="result__a" href="https://ad.x">Ad</a></div>' +
+    '<div class="result results_links "><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fa.dev%2F%3Fq%3D1&amp;rut=z">A &amp; <b>B</b></a><a class="result__snippet" href="#">s  <b>one</b></a></div>' +
+    '<div class="result results_links "><a class="result__a" href="https://b.dev/">B</a></div>' +
+    '<div class="result results_links "><a class="result__a" href="javascript:void(0)">bad</a></div>';
+
+  it("skips ads and bad links, unwraps redirects, cleans titles and snippets", () => {
+    expect(parseDuckDuckGo(page, 10)).toEqual([
+      { title: "A & B", url: "https://a.dev/?q=1", snippet: "s one" },
+      { title: "B", url: "https://b.dev/", snippet: "" },
+    ]);
+  });
+
+  it("stops at the requested count", () => {
+    expect(parseDuckDuckGo(page, 1)).toHaveLength(1);
   });
 });

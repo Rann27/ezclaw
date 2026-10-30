@@ -156,6 +156,9 @@ export function useAgentRun(threadId: string | undefined, activeRun: { runId: st
           case "ask_resolved":
             s.asks = s.asks.filter((a) => a.askId !== ev.askId);
             break;
+          case "user_message":
+            void refresh();
+            break;
           case "plan":
             s.plan = ev.items;
             void qc.invalidateQueries({ queryKey: keys.thread(forThread) });

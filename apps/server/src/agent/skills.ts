@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export interface Skill {
+  /** Stable id derived from the SKILL.md path. */
+  id: string;
   name: string;
   description: string;
   /** Folder that holds SKILL.md and any helper files. */
@@ -9,19 +12,50 @@ export interface Skill {
   file: string;
   /** Where it was found, for the listing: "EZClaw", "workspace", or the configured folder. */
   source: string;
+  /** MCP servers the skill needs (front matter `mcp:`); started when the skill is used. */
+  mcp: string[];
 }
 
-const MAX_SKILLS = 80;
+/** Per-skill switches; a skill without one is on for Agent and off for Chat. */
+export interface SkillState {
+  enabled: boolean;
+  chat: boolean;
+}
+
+const MAX_SKILLS = 200;
 const MAX_SKILL_BYTES = 200 * 1024;
 
-/** Reads `name:` and `description:` from YAML front matter. Anything fancier is ignored. */
-function frontMatter(text: string): { name?: string; description?: string } {
+export function skillId(file: string): string {
+  return createHash("sha1").update(resolve(file).toLowerCase()).digest("hex").slice(0, 16);
+}
+
+/** Reads `name:`, `description:` and `mcp:` from YAML front matter. Anything fancier is ignored. */
+export function frontMatter(text: string): { name?: string; description?: string; mcp: string[] } {
   const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  if (!m) return {};
-  const out: Record<string, string> = {};
-  for (const line of m[1]!.split(/\r?\n/)) {
-    const kv = /^(name|description):\s*(.*)$/.exec(line.trim());
-    if (kv) out[kv[1]!] = kv[2]!.replace(/^["']|["']$/g, "").trim();
+  const out: { name?: string; description?: string; mcp: string[] } = { mcp: [] };
+  if (!m) return out;
+  const lines = m[1]!.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const kv = /^(name|description|mcp|mcp_servers|mcp-servers):\s*(.*)$/.exec(line.trim());
+    if (!kv) continue;
+    const value = kv[2]!.trim();
+    if (kv[1] === "name" || kv[1] === "description") {
+      out[kv[1]] = value.replace(/^["']|["']$/g, "").trim();
+      continue;
+    }
+    if (value) {
+      out.mcp.push(
+        ...value
+          .replace(/^\[|\]$/g, "")
+          .split(",")
+          .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+          .filter(Boolean),
+      );
+    } else {
+      // A YAML list on the following lines.
+      while (i + 1 < lines.length && /^\s*-\s+/.test(lines[i + 1]!)) out.mcp.push(lines[++i]!.replace(/^\s*-\s+/, "").replace(/^["']|["']$/g, "").trim());
+    }
   }
   return out;
 }
@@ -43,7 +77,7 @@ function scan(root: string, source: string, into: Map<string, Skill>) {
       const fm = frontMatter(readFileSync(file, "utf8"));
       const name = (fm.name || n).slice(0, 80);
       // The first folder that defines a name wins, so a workspace skill overrides a global one of the same name.
-      if (!into.has(name)) into.set(name, { name, description: (fm.description ?? "").slice(0, 400), dir, file, source });
+      if (!into.has(name.toLowerCase())) into.set(name.toLowerCase(), { id: skillId(file), name, description: (fm.description ?? "").slice(0, 400), dir, file, source, mcp: fm.mcp.slice(0, 10) });
     } catch {
       // An unreadable skill is skipped.
     }
@@ -51,7 +85,7 @@ function scan(root: string, source: string, into: Map<string, Skill>) {
 }
 
 /**
- * Skills available to an agent: the workspace's own (.ezclaw/skills, .agents/skills, .claude/skills),
+ * Skills on this computer: the workspace's own (.ezclaw/skills, .agents/skills, .claude/skills),
  * then EZClaw's skills folder, then the extra folders set in Settings.
  */
 export function discoverSkills(workspace: string | null, ezclawDir: string, extraDirs: string[]): Skill[] {
@@ -60,6 +94,14 @@ export function discoverSkills(workspace: string | null, ezclawDir: string, extr
   scan(ezclawDir, "EZClaw", found);
   for (const d of extraDirs) scan(d, d, found);
   return [...found.values()];
+}
+
+/** The skills a run may use: on, and for Chat also switched on for Chat. */
+export function usableSkills(all: Skill[], states: Map<string, SkillState>, mode: "agent" | "chat"): Skill[] {
+  return all.filter((s) => {
+    const st = states.get(s.id) ?? { enabled: true, chat: false };
+    return st.enabled && (mode === "agent" || st.chat);
+  });
 }
 
 export function skillListing(skills: Skill[]): string {
@@ -84,4 +126,11 @@ export function readSkill(skill: Skill): string {
   }
   const extra = files.length ? `\n\n---\nFile lain di folder skill (${skill.dir}):\n${files.map((f) => `- ${f}`).join("\n")}\nBaca dengan read_file memakai path absolut bila perlu.` : "";
   return `${text}${extra}`;
+}
+
+/** `/name rest` at the start of a message: the skill the owner invoked, if there is one by that name. */
+export function slashSkill(text: string, skills: Skill[]): Skill | null {
+  const m = /^\/([A-Za-z0-9][\w-]*)(?:\s|$)/.exec(text.trim());
+  if (!m) return null;
+  return skills.find((s) => s.name.toLowerCase() === m[1]!.toLowerCase()) ?? null;
 }

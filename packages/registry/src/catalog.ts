@@ -2,7 +2,7 @@ import type { Protocol } from "@ezclaw/core";
 
 export type EndpointKind = "provider" | "gateway" | "local" | "custom";
 export type AuthType = "bearer" | "header" | "none";
-export type DiscoveryParser = "openrouter" | "venice" | "anthropic" | "openai";
+export type DiscoveryParser = "openrouter" | "venice" | "anthropic" | "openai" | "experiential";
 
 export interface AuthSpec {
   type: AuthType;
@@ -183,6 +183,23 @@ export const ENDPOINT_PRESETS: EndpointPreset[] = [
     needsKey: true,
     discovery: "venice",
     docsUrl: "https://docs.venice.ai",
+  },
+  {
+    id: "experiential",
+    name: "Experiential Labs",
+    kind: "gateway",
+    protocol: "openai-chat",
+    alsoSupports: ["openai-responses"],
+    baseUrl: "https://api.experientiallabs.ai/v1",
+    auth: bearer,
+    needsKey: true,
+    discovery: "experiential",
+    docsUrl: "https://platform.experientiallabs.ai/docs",
+    notes: [
+      "Key berawalan xpl_, dibuat di platform.experientiallabs.ai bagian Settings, API Keys.",
+      "Daftar model mengikuti key-mu; konteks, vision, tools, dan reasoning diambil dari katalog publik mereka.",
+      "Generate gambar lewat gateway ini belum didokumentasikan, jadi model gambarnya belum dipakai di Image dan Edit.",
+    ],
   },
   {
     id: "ollama",

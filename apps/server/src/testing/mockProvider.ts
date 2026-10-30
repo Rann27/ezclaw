@@ -91,6 +91,21 @@ export async function startMockProvider(port = 0): Promise<MockProvider> {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       return res.end('<html><head><title>Dokumen Uji</title><script>alert(1)</script></head><body><nav>menu</nav><h1>Panduan &amp; Contoh</h1><p>Paragraf <b>penting</b> di sini.</p><ul><li>satu</li><li>dua</li></ul></body></html>');
     }
+    // DuckDuckGo's HTML results page: one ad (skipped), one wrapped link, one direct link.
+    if (req.method === "POST" && path === "/ddg") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      return res.end(
+        '<div class="results">'
+          + '<div class="result result--ad results_links"><h2 class="result__title"><a class="result__a" href="https://ads.example/x">Iklan</a></h2><a class="result__snippet" href="#">beli</a></div>'
+          + '<div class="result results_links web-result "><h2 class="result__title"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fezclaw.dev%2Fdocs&amp;rut=1">EZClaw <b>Docs</b></a></h2><a class="result__snippet" href="#">Panduan &amp; <b>contoh</b></a></div>'
+          + '<div class="result results_links web-result "><h2 class="result__title"><a class="result__a" href="https://github.com/x/ezclaw">ezclaw repo</a></h2><a class="result__snippet" href="#">Kode sumber</a></div>'
+          + "</div>",
+      );
+    }
+    if (req.method === "POST" && path === "/ddg-blocked") {
+      res.writeHead(202, { "content-type": "text/html" });
+      return res.end("<html><body>anomaly detected</body></html>");
+    }
     if (req.method === "GET" && path === "/redirect") {
       res.writeHead(302, { location: "/page.html" });
       return res.end();
@@ -108,6 +123,24 @@ export async function startMockProvider(port = 0): Promise<MockProvider> {
       const multi = { id: "nano-edit", type: "inpaint", model_spec: { name: "Nano Edit", constraints: { aspectRatios: ["auto", "1:1"], promptCharacterLimit: 1500, combineImages: true, maxInputImages: 4, resolutions: ["1K", "2K"] } } };
       const styled = { id: "krea-gen", type: "image", model_spec: { name: "Krea", constraints: { promptCharacterLimit: 1500, steps: { default: 20, max: 30 }, widthHeightDivisor: 16, maxStyleReferences: 3, supportsStyleReferenceStrength: true } } };
       return json(200, { object: "list", type: all ? "all" : "text", data: all ? [text, edit, gen, multi, styled] : [text] });
+    }
+    // Experiential Labs: the key's list says only ids; the keyless catalog on the same host has the facts.
+    if (req.method === "GET" && path === "/explabs/v1/models") {
+      return json(200, { object: "list", data: [{ id: "claude-opus-5.5", object: "model", owned_by: "exp" }, { id: "glm-5.3-uncensored", object: "model", owned_by: "exp", uncensored: true }, { id: "text-embedding-3-small", object: "model", owned_by: "exp" }] });
+    }
+    if (req.method === "GET" && path === "/api/models") {
+      return json(200, {
+        models: [
+          {
+        model: { slug: "claude-opus-5.5", display_name: "Claude Opus 5.5", context_window: 1000000, max_input_tokens: 1000000, max_output_tokens: 128000, input_modalities: ["text", "image", "pdf"], output_modalities: ["text"], supported_params: { stop: true, tools: true, reasoning: true, temperature: true, structured_outputs: true }, maker: "Anthropic" },
+        providers: [{ input_nano_usd_per_million: 4000000000, output_nano_usd_per_million: 20000000000, capabilities: { supports_tools: true, minimum_temperature: 1, maximum_temperature: 1, supported_reasoning_efforts: ["low", "medium", "high", "xhigh", "max"], reasoning_default_effort: "medium", reasoning_default_enabled: true } }],
+      },
+          { model: { slug: "glm-5.3-uncensored", display_name: "GLM 5.3 Uncensored", context_window: 1048576, max_input_tokens: 917504, input_modalities: ["text"], output_modalities: ["text"], supported_params: { tools: true, top_k: true, top_p: true, temperature: true, reasoning: true } }, providers: [{ capabilities: { supported_reasoning_efforts: ["none", "low", "high"] } }] },
+        ],
+        total: 2,
+        limit: 500,
+        offset: 0,
+      });
     }
     if (req.method === "GET" && path === "/v1/models-401") return json(401, { error: { message: "Invalid API key" } });
     if (req.method === "GET" && path === "/anthropic/v1/models") {

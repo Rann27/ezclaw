@@ -9,10 +9,15 @@ type ToolResultPart = Extract<Part, { type: "tool_result" }>;
 const INTERRUPTED = "Pemanggilan tool ini tidak selesai (dihentikan atau terputus), jadi tidak ada hasilnya.";
 
 function textOf(parts: Part[]): string {
-  return parts
+  const text = parts
     .filter((p): p is Extract<Part, { type: "text" }> => p.type === "text")
     .map((p) => p.text)
     .join("");
+  // Attached documents travel as text after the message, each in its own block.
+  const files = parts
+    .filter((p): p is Extract<Part, { type: "file" }> => p.type === "file")
+    .map((f) => `<attachment name="${f.name.replace(/"/g, "'")}">\n${f.note ? `[${f.note}]\n` : ""}${f.text}\n</attachment>`);
+  return files.length ? [text, ...files].filter(Boolean).join("\n\n") : text;
 }
 
 function callsOf(parts: Part[]): ToolCallPart[] {

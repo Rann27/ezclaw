@@ -94,14 +94,53 @@ Konteks di dalam satu thread: Agent dan Chat sama-sama memadatkan percakapan lam
 | `start_process`, `read_process`, `stop_process` | Proses lama di latar (dev server, watcher); berhenti saat EZClaw ditutup | Sama dengan shell |
 | `view_image` | Menampilkan gambar dari workspace ke model yang punya vision | Tanpa izin di dalam workspace |
 | `web_fetch` | Membaca halaman web sebagai teks; alamat lokal dan jaringan privat ditolak | Tanya, kecuali Otomatis penuh |
-| `web_search` | Pencarian lewat Brave, Tavily, atau Exa dengan key pemilik | Tanya di mode Tanya dulu |
+| `web_search` | Pencarian lewat Brave, Tavily, atau Exa dengan key pemilik; tanpa key, atau kalau layanan itu gagal, lewat DuckDuckGo | Tanya di mode Tanya dulu |
 | `spawn_agent` | Subagent riset hanya-baca dengan konteks sendiri; hasilnya laporan | Langkah yang butuh izin tetap ditanyakan ke pemilik |
 | `read_skill` | Membaca `SKILL.md` dari skill yang terdaftar | Tanpa izin |
 | `update_plan`, `ask_user`, `propose_memory` | Rencana, bertanya, mengusulkan memori | Tanpa izin |
 
 **Undo**: di bawah setiap permintaan yang mengubah file muncul "Batalkan perubahan file". Semua file yang diubah run itu lewat tools file dikembalikan; file yang dibuat run itu dihapus. Perubahan lewat perintah shell tidak tercatat.
 
-**Skill** dicari di `.ezclaw/skills`, `.agents/skills`, dan `.claude/skills` di workspace, folder `skills` di data EZClaw, dan folder tambahan di Settings, Umum.
+## MCP
+
+Settings, MCP. MCP server memberi model tools tambahan. EZClaw adalah klien MCP (SDK resmi `@modelcontextprotocol/sdk`).
+
+- **Lokal (stdio)**: perintah seperti `npx`/`uvx` dijalankan sebagai proses anak. Hanya variabel lingkungan dasar yang diwariskan, ditambah env milik server itu; variabel `EZCLAW_*` dan key lain tidak ikut. Baris stderr terakhir tampil sebagai log.
+- **Remote (HTTP)**: Streamable HTTP, dengan cadangan HTTP+SSE untuk server lama. Header (misalnya `Authorization`) bisa diisi sendiri, atau server meminta **login OAuth**: tombol Login membuka halaman masuknya, lalu browser kembali ke `/mcp/oauth/callback` di EZClaw. Registrasi klien dan token disimpan di penyimpanan kredensial.
+- Env, header, dan token tidak pernah masuk database; halaman hanya menampilkan namanya.
+- **Aktif**: disambung saat EZClaw jalan dan tools-nya ditawarkan. **Agent/Chat**: mode yang memakainya. Server yang mati tetap bisa dinyalakan otomatis oleh skill yang membutuhkannya.
+- Tools tampil ke model sebagai `mcp__server__tool`. Resource server bisa dibaca lewat `mcp_list_resources` dan `mcp_read_resource`; prompt server muncul di menu `/` sebagai `/server:prompt` dan hasilnya masuk ke kotak pesan.
+- **Izin**: "Ikut mode thread" berarti tool bertanda hanya-baca (`readOnlyHint`) jalan tanpa tanya, tool lain ditanya kecuali di Otomatis penuh. "Percayai server" menjalankan semua tool tanpa tanya. Per tool bisa diatur Selalu izinkan, Selalu tanya (ditanya juga di Otomatis penuh), atau Matikan. "Selalu izinkan" di kartu izin mengubah aturan tool itu.
+- **Impor**: config Claude Desktop, Cursor, VS Code (JSON) atau Codex (`config.toml`), dari file di komputer ini atau ditempel. Server hasil impor mulai dalam keadaan mati.
+
+## Skills
+
+Settings, Skills. Skill adalah folder berisi `SKILL.md` dengan front matter `name`, `description`, dan opsional `mcp: [server]`.
+
+- Dicari di `.ezclaw/skills`, `.agents/skills`, dan `.claude/skills` di workspace, folder `skills` di data EZClaw, dan folder tambahan di Settings, Umum. Nama yang sama: yang pertama ditemukan menang.
+- Per skill: **Aktif** (dipakai Agent) dan **Chat** (juga dipakai di Chat; bawaan mati).
+- Skill di folder EZClaw bisa diubah, dihapus, dan dibuat dari app. **Impor** menyalin setiap folder ber-`SKILL.md` dari folder lokal, file zip, atau repo GitHub publik (`https://github.com/pemilik/repo/tree/branch/folder`).
+- `/nama-skill` di awal pesan mengirim isi skill bersama request (tanpa menunggu model memanggil `read_skill`) dan menyalakan MCP server yang disebut skill.
+- Skill yang dibaca lewat `read_skill` juga menyalakan MCP server-nya; tools server itu tersedia mulai langkah berikutnya.
+
+## Pesan di tengah run
+
+Saat Agent (atau Chat dengan tools) sedang bekerja, kotak pesan tetap aktif. Pesan yang dikirim masuk antrean dan disisipkan ke percakapan setelah langkah yang sedang berjalan selesai (setelah hasil tool, supaya setiap pemanggilan tool tetap punya jawabannya). Kalau model sudah selesai menjawab saat pesan masuk, run berlanjut untuk menjawab pesan itu. Chat biasa tanpa tools tetap menunggu jawaban selesai.
+
+## Lampiran di Chat
+
+Klik ikon klip, seret file ke kotak pesan, atau tempel dari clipboard.
+
+- **Gambar** dikirim sebagai gambar. Kalau model yang dipilih tidak menerima gambar, pesan itu dijawab model cadangan: peran **Cadangan vision** di Settings, Umum, atau bila kosong model lain yang menerima gambar (endpoint yang sama didahulukan). Thread tetap memakai model pilihanmu.
+- **PDF** dibaca teksnya (lebih hemat, bisa dibaca model teks). PDF tanpa lapisan teks (hasil scan) diubah menjadi gambar per halaman, paling banyak 8 halaman, lalu mengikuti aturan gambar.
+- **DOCX** dan file teks/kode dikirim sebagai teks. Lebih dari 150.000 karakter per file dipotong dengan catatan.
+- Teks lampiran ikut tersimpan di pesan, jadi tetap terbaca di giliran berikutnya.
+
+## Chat dengan tools
+
+Kalau ada MCP server yang aktif untuk Chat, atau skill yang dinyalakan untuk Chat, pesan Chat dijalankan dengan loop yang sama seperti Agent, tanpa folder: model bisa memanggil tools MCP dan `read_skill`, izin mengikuti mode Tanya dulu, dan langkahnya tampil sebagai timeline. Tanpa itu, Chat tetap streaming biasa.
+
+Tombol **Web** di kotak pesan Chat juga memakai loop ini, dengan tool `web_search` dan `web_fetch`. Menyalakan tombol itu dihitung sebagai izin, jadi pencarian dan pembacaan halaman tidak ditanyakan lagi. Model diminta menutup jawabannya dengan daftar sumber. Tombolnya mati untuk model yang tidak mendukung tools, dan posisinya diingat di browser.
 
 ## Dibanding Codex dan Claude Code / Cowork
 
@@ -109,9 +148,7 @@ Yang sudah setara: loop tool calling dengan izin per mode, edit file presisi dan
 
 Yang **belum** ada:
 
-- Klien **MCP** (server tool eksternal).
 - **Sandbox** tingkat sistem operasi. Batas EZClaw adalah folder workspace, izin, dan deteksi perintah berisiko, bukan isolasi proses.
 - **Hooks** (perintah otomatis sebelum atau sesudah tool).
-- Mengirim pesan **di tengah run** yang sedang berjalan; saat ini pesan baru menunggu run selesai.
 - Subagent yang bisa **mengubah** file, dan beberapa subagent paralel.
 - Undo untuk perubahan yang dibuat lewat perintah shell.

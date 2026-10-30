@@ -1,4 +1,19 @@
 import {
+  type LibraryResponse,
+  type SearchResponse,
+  mcpImportSchema,
+  mcpPromptGetSchema,
+  mcpServerCreateSchema,
+  mcpServerPatchSchema,
+  skillContentSchema,
+  skillCreateSchema,
+  skillImportSchema,
+  skillStatePatchSchema,
+  type McpImportResponse,
+  type McpListResponse,
+  type McpPromptResult,
+  type SkillImportResponse,
+  type SkillListResponse,
   approvalDecisionSchema,
   askAnswerSchema,
   codexDirSchema,
@@ -60,6 +75,10 @@ import { listDirs, makeDir } from "./services/folders.js";
 import { apiGuard, hostGuard, securityHeaders } from "./security.js";
 import type { Services } from "./services/index.js";
 import { getSettings, updateSettings } from "./settings.js";
+import { parseMcpConfig, readConfigFile } from "./mcp/import.js";
+import { listLibrary } from "./services/library.js";
+import { attachmentParts, storeAttachment } from "./services/attachments.js";
+import { pickFolderNative } from "./services/nativePicker.js";
 import { webHandler } from "./web.js";
 
 export interface AppDeps {
@@ -92,7 +111,7 @@ function webEntry(distDir: string): string | null {
 }
 
 export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) {
-  const { registry, runs, chat, secrets, harness, rules, assets, image, memory, checkpoints, processes } = services;
+  const { registry, runs, chat, secrets, harness, rules, assets, image, memory, checkpoints, processes, mcp, skills } = services;
   const app = new Hono();
   app.use("*", hostGuard(config.allowedHosts));
   app.use("*", securityHeaders);
@@ -162,7 +181,7 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
   /* ----------------------------------------------------------------- threads */
   api.get("/threads", (c) => {
     const mode = modeSchema.parse(c.req.query("mode"));
-    return c.json<ThreadListResponse>({ threads: chat.list(mode) });
+    return c.json<ThreadListResponse>({ threads: chat.list(mode, c.req.query("archived") === "1") });
   });
   api.post("/threads", async (c) => {
     const input = threadCreateSchema.parse(await readJson(c.req.raw));
@@ -175,6 +194,7 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
     );
   });
   api.get("/threads/:id", (c) => c.json(chat.detail(c.req.param("id"))));
+  api.get("/search", (c) => c.json<SearchResponse>({ hits: chat.search((c.req.query("q") ?? "").slice(0, 200)) }));
   api.patch("/threads/:id", async (c) => {
     const patch = threadPatchSchema.parse(await readJson(c.req.raw));
     return c.json(chat.patch(c.req.param("id"), patch));
@@ -185,7 +205,15 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
   });
   api.post("/threads/:id/messages", async (c) => {
     const input = sendMessageSchema.parse(await readJson(c.req.raw));
-    return c.json(chat.send(c.req.param("id"), input), 201);
+    const extra = input.attachments?.length ? await attachmentParts(assets, input.attachments) : [];
+    return c.json(chat.send(c.req.param("id"), input, extra), 201);
+  });
+  api.post("/attachments", async (c) => {
+    const declared = Number(c.req.header("content-length") ?? 0);
+    if (declared > MAX_ASSET_BYTES) throw new HttpError(413, "file_too_large", `File lebih besar dari ${MAX_ASSET_BYTES / 1024 / 1024} MB.`);
+    const name = decodeURIComponent(c.req.header("x-file-name") ?? "lampiran").slice(0, 200);
+    const stored = storeAttachment(assets, Buffer.from(await c.req.arrayBuffer()), name);
+    return c.json({ ...stored.asset, attachmentKind: stored.kind }, 201);
   });
 
   api.post("/threads/:id/edits", async (c) => {
@@ -205,6 +233,24 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
     return c.json(assets.save(bytes, "upload"), 201);
   });
   api.get("/assets/:id/info", (c) => c.json(assets.dto(c.req.param("id"))));
+  api.patch("/assets/:id", async (c) => {
+    const body = (await readJson(c.req.raw)) as { favorite?: unknown };
+    if (typeof body.favorite !== "boolean") throw new HttpError(400, "invalid_request", "Kirim { favorite: true|false }.");
+    return c.json(assets.setFavorite(c.req.param("id"), body.favorite));
+  });
+  api.get("/library", (c) => {
+    const mode = c.req.query("mode");
+    return c.json<LibraryResponse>(
+      listLibrary(db, {
+        q: c.req.query("q") ?? undefined,
+        mode: mode === "image" || mode === "edit" ? mode : undefined,
+        model: c.req.query("model") || undefined,
+        favorite: c.req.query("favorite") === "1",
+        offset: Number(c.req.query("offset") ?? 0) || 0,
+        limit: Number(c.req.query("limit") ?? 60) || 60,
+      }),
+    );
+  });
   api.get("/assets/:id", (c) => {
     const { bytes, mime, file } = assets.read(c.req.param("id"));
     return new Response(new Uint8Array(bytes), {
@@ -252,6 +298,14 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
   });
 
   api.get("/fs/dirs", (c) => c.json<DirListResponse>(listDirs(c.req.query("path") || undefined)));
+  api.post("/fs/pick-folder", async (c) => {
+    const body = (await readJson(c.req.raw)) as { initial?: unknown; title?: unknown };
+    const path = await pickFolderNative({
+      initial: typeof body.initial === "string" ? body.initial.slice(0, 1000) : null,
+      title: typeof body.title === "string" ? body.title.slice(0, 120) : undefined,
+    });
+    return c.json({ path });
+  });
   api.post("/fs/mkdir", async (c) => {
     const { parent, name } = mkdirSchema.parse(await readJson(c.req.raw));
     return c.json({ path: makeDir(parent, name) }, 201);
@@ -345,6 +399,61 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
     return c.body(null, 204);
   });
 
+  /* --------------------------------------------------------------------- MCP */
+  api.get("/mcp", (c) => c.json<McpListResponse>({ servers: mcp.list(), callbackUrl: mcp.callbackUrl }));
+  api.post("/mcp", async (c) => c.json(mcp.create(mcpServerCreateSchema.parse(await readJson(c.req.raw))), 201));
+  api.patch("/mcp/:id", async (c) => c.json(await mcp.update(c.req.param("id"), mcpServerPatchSchema.parse(await readJson(c.req.raw)))));
+  api.delete("/mcp/:id", async (c) => {
+    await mcp.remove(c.req.param("id"));
+    return c.body(null, 204);
+  });
+  api.post("/mcp/:id/connect", async (c) => {
+    const id = c.req.param("id");
+    mcp.row(id);
+    await mcp.disconnect(id);
+    await mcp.connect(id).catch(() => {});
+    return c.json(mcp.dto(mcp.row(id)));
+  });
+  api.post("/mcp/:id/logout", async (c) => c.json(await mcp.logout(c.req.param("id"))));
+  api.post("/mcp/:id/prompts/:name", async (c) => {
+    const { arguments: args } = mcpPromptGetSchema.parse(await readJson(c.req.raw));
+    return c.json<McpPromptResult>({ text: await mcp.getPrompt(c.req.param("id"), c.req.param("name"), args) });
+  });
+  api.post("/mcp/import", async (c) => {
+    const input = mcpImportSchema.parse(await readJson(c.req.raw));
+    const text = "text" in input ? input.text : readConfigFile(input.source, getSettings(db).codexDir);
+    const entries = parseMcpConfig(text);
+    if (!entries.length) throw new HttpError(400, "mcp_import_empty", "Tidak ada MCP server di config itu.");
+    return c.json<McpImportResponse>(mcp.importServers(entries));
+  });
+
+  /* ------------------------------------------------------------------ skills */
+  const skillWs = (c: { req: { query(k: string): string | undefined } }) => c.req.query("workspace") || null;
+  api.get("/skills", (c) => c.json<SkillListResponse>(skills.list(skillWs(c))));
+  api.post("/skills", async (c) => c.json(skills.create(skillCreateSchema.parse(await readJson(c.req.raw))), 201));
+  api.patch("/skills/:id", async (c) => {
+    skills.setState(c.req.param("id"), skillStatePatchSchema.parse(await readJson(c.req.raw)), skillWs(c));
+    return c.json(skills.list(skillWs(c)).skills.find((s) => s.id === c.req.param("id")));
+  });
+  api.get("/skills/:id/content", (c) => c.json(skills.read(c.req.param("id"), skillWs(c))));
+  api.put("/skills/:id/content", async (c) => {
+    skills.write(c.req.param("id"), skillContentSchema.parse(await readJson(c.req.raw)).content);
+    return c.body(null, 204);
+  });
+  api.delete("/skills/:id", (c) => {
+    skills.remove(c.req.param("id"));
+    return c.body(null, 204);
+  });
+  api.post("/skills/import", async (c) => {
+    const input = skillImportSchema.parse(await readJson(c.req.raw));
+    return c.json<SkillImportResponse>("folder" in input ? skills.importFolder(input.folder) : await skills.importGithub(input.github));
+  });
+  api.post("/skills/import-zip", async (c) => {
+    const declared = Number(c.req.header("content-length") ?? 0);
+    if (declared > 50 * 1024 * 1024) throw new HttpError(413, "skill_zip_too_big", "File zip lebih dari 50 MB.");
+    return c.json<SkillImportResponse>(skills.importZip(Buffer.from(await c.req.arrayBuffer())));
+  });
+
   /* -------------------------------------------------------------- web search */
   api.get("/websearch", (c) => {
     const provider = getSettings(db).webSearchProvider;
@@ -432,6 +541,24 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
   api.all("*", (c) => c.json(errorBody("not_found", "Endpoint API tidak ditemukan."), 404));
 
   app.route("/api", api);
+
+  // The browser comes back here from an MCP server's login page. Outside /api: it carries no session
+  // token, so it only finishes a login this EZClaw started (matched by the OAuth state).
+  app.get("/mcp/oauth/callback", async (c) => {
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    const failed = c.req.query("error_description") ?? c.req.query("error");
+    const page = (title: string, text: string) =>
+      c.html(`<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.6"><h1 style="font-size:1.25rem">${esc(title)}</h1><p>${esc(text)}</p></body>`);
+    if (failed) return page("Login MCP dibatalkan", `Server menjawab: ${failed}. Tutup tab ini dan coba lagi dari EZClaw.`);
+    if (!code || !state) return page("Login MCP tidak lengkap", "Alamat ini tidak membawa kode login. Tutup tab ini dan mulai lagi dari Settings, bagian MCP.");
+    try {
+      const name = await mcp.finishAuth(state, code);
+      return page("Login berhasil", `EZClaw sudah tersambung ke ${name}. Tab ini boleh ditutup.`);
+    } catch (err) {
+      return page("Login MCP gagal", err instanceof Error ? err.message : String(err));
+    }
+  });
   app.get("*", webHandler({ distDir: config.webDistDir, sessionToken: config.sessionToken }));
 
   app.onError((err, c) => {
@@ -446,6 +573,10 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
   });
 
   return app;
+}
+
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
 }
 
 async function readJson(req: Request): Promise<unknown> {

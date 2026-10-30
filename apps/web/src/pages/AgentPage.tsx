@@ -14,6 +14,7 @@ import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
 import { Composer } from "../components/chat/Composer";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
+import { useSlashItems } from "../components/chat/SlashMenu";
 import { canAgent, keys, useCheckpoints, useEndpoints, useModels, useRecentWorkspaces, useSettings, useThread } from "../lib/queries";
 
 const LAST_MODEL_KEY = "ezclaw.lastAgentModel";
@@ -133,6 +134,7 @@ export function AgentPage() {
 
   /* -------------------------------------------------------------------- state */
   const running = !!live || !!thread.data?.activeRun;
+  const slash = useSlashItems("agent", thread.data?.workspace ?? workspaceText.trim());
   const harness = thread.data?.harness ?? pendingHarness;
   const approvalMode: ApprovalMode = thread.data?.approvalMode ?? pendingMode;
   const messages = thread.data?.messages ?? [];
@@ -184,7 +186,7 @@ export function AgentPage() {
         }
         const threadIdNow = id;
         await qc.fetchQuery({ queryKey: keys.thread(threadIdNow), queryFn: () => api<ThreadDetailDto>(`/threads/${threadIdNow}`), staleTime: 0 });
-        attach(res.runId, id);
+        if (!res.queued) attach(res.runId, id);
         void qc.invalidateQueries({ queryKey: ["threads"] });
         void qc.invalidateQueries({ queryKey: keys.workspaces });
         if (!threadId) void navigate({ to: "/agent", search: { t: id } });
@@ -386,6 +388,8 @@ export function AgentPage() {
 
         <Composer
           wide
+          midRun
+          slash={slash}
           model={chosen}
           onPickModel={() => setPickerOpen(true)}
           running={running}

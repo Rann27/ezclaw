@@ -13,7 +13,7 @@ type AssetRow = typeof assets.$inferSelect;
 export const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 
 export function toAssetDto(r: AssetRow): AssetDto {
-  return { id: r.id, kind: r.kind, mime: r.mime, bytes: r.bytes, width: r.width, height: r.height, createdAt: r.createdAt.toISOString() };
+  return { id: r.id, kind: r.kind, mime: r.mime, bytes: r.bytes, width: r.width, height: r.height, favorite: r.favorite, name: r.name, createdAt: r.createdAt.toISOString() };
 }
 
 /** Image files kept by EZClaw, stored as plain files beside the database so they can be backed up or opened directly. */
@@ -43,6 +43,27 @@ export class AssetService {
     writeFileSync(join(this.dir, file), bytes);
     const row: typeof assets.$inferInsert = { id, kind, mime: info.mime, bytes: bytes.length, width: info.width, height: info.height, sha256, file, createdAt: new Date() };
     this.db.insert(assets).values(row).run();
+    return toAssetDto(this.row(id));
+  }
+
+  /** Stores a non-image file attached to a chat message. The type is decided by the caller from its content. */
+  saveAttachment(bytes: Buffer, name: string, mime: string, ext: string): AssetDto {
+    if (bytes.length === 0) throw new HttpError(400, "empty_file", "File kosong.");
+    if (bytes.length > MAX_ASSET_BYTES) throw new HttpError(413, "file_too_large", `File lebih besar dari ${MAX_ASSET_BYTES / 1024 / 1024} MB.`);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const id = randomUUID();
+    const file = `${id}.${ext}`;
+    writeFileSync(join(this.dir, file), bytes);
+    this.db
+      .insert(assets)
+      .values({ id, kind: "attachment", mime, bytes: bytes.length, width: null, height: null, sha256, file, name: name.slice(0, 200), createdAt: new Date() })
+      .run();
+    return toAssetDto(this.row(id));
+  }
+
+  setFavorite(id: string, favorite: boolean): AssetDto {
+    this.row(id);
+    this.db.update(assets).set({ favorite }).where(eq(assets.id, id)).run();
     return toAssetDto(this.row(id));
   }
 

@@ -62,6 +62,8 @@ export const threads = sqliteTable(
     mode: text("mode", { enum: MODES }).notNull(),
     title: text("title").notNull(),
     pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+    /** Sidebar group the owner put the thread in; a group exists while a thread uses its name. */
+    groupName: text("group_name"),
     modelRowId: text("model_row_id").references(() => models.id, { onDelete: "set null" }),
     systemPrompt: text("system_prompt").notNull().default(""),
     params: text("params", { mode: "json" }).$type<ChatParams>().notNull().default({}),
@@ -158,7 +160,8 @@ export const assets = sqliteTable(
   "assets",
   {
     id: text("id").primaryKey(),
-    kind: text("kind", { enum: ["upload", "generated"] }).notNull(),
+    /** "attachment": a non-image file attached to a chat message (PDF, DOCX, text). */
+    kind: text("kind", { enum: ["upload", "generated", "attachment"] }).notNull(),
     mime: text("mime").notNull(),
     bytes: integer("bytes").notNull(),
     width: integer("width"),
@@ -166,6 +169,10 @@ export const assets = sqliteTable(
     sha256: text("sha256").notNull(),
     /** File name under the assets folder of the data directory. */
     file: text("file").notNull(),
+    /** Marked as a favourite in the Library. */
+    favorite: integer("favorite", { mode: "boolean" }).notNull().default(false),
+    /** Attachments: the name the file had when it was attached. */
+    name: text("name"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => [index("assets_sha_idx").on(t.sha256)],
@@ -208,3 +215,34 @@ export const fileSnapshots = sqliteTable(
   },
   (t) => [uniqueIndex("file_snapshots_run_path_idx").on(t.runMessageId, t.path), index("file_snapshots_thread_idx").on(t.threadId)],
 );
+
+/** An MCP server the owner added. Env values, header values and OAuth tokens live in the secret store. */
+export const mcpServers = sqliteTable(
+  "mcp_servers",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    transport: text("transport", { enum: ["stdio", "http"] }).notNull(),
+    command: text("command"),
+    args: text("args", { mode: "json" }).$type<string[]>().notNull(),
+    cwd: text("cwd"),
+    url: text("url"),
+    envKeys: text("env_keys", { mode: "json" }).$type<string[]>().notNull(),
+    headerKeys: text("header_keys", { mode: "json" }).$type<string[]>().notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull(),
+    agent: integer("agent", { mode: "boolean" }).notNull(),
+    chat: integer("chat", { mode: "boolean" }).notNull(),
+    trust: text("trust", { enum: ["ask", "allow"] }).notNull(),
+    toolPolicies: text("tool_policies", { mode: "json" }).$type<Record<string, "auto" | "allow" | "ask" | "off">>().notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("mcp_servers_name_idx").on(t.name)],
+);
+
+/** On/off switches for a skill, keyed by its SKILL.md path. Skills without a row are on for Agent, off for Chat. */
+export const skillStates = sqliteTable("skill_states", {
+  id: text("id").primaryKey(),
+  path: text("path").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  chat: integer("chat", { mode: "boolean" }).notNull(),
+});

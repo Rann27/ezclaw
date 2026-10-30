@@ -200,6 +200,8 @@ export const threadPatchSchema = z
     title: z.string().trim().min(1).max(120),
     pinned: z.boolean(),
     archived: z.boolean(),
+    /** Put the thread in a sidebar group (created by this), or null to take it out. */
+    group: z.string().trim().min(1).max(60).nullable(),
     modelId: z.string().nullable(),
     systemPrompt: z.string().max(20000),
     params: chatParamsSchema,
@@ -220,6 +222,10 @@ export const sendMessageSchema = z.object({
   modelId: z.string().min(1),
   systemPrompt: z.string().max(20000).optional(),
   params: chatParamsSchema.optional(),
+  /** Assets from POST /attachments: images, PDFs, DOCX, text files. */
+  attachments: z.array(z.string().min(1).max(80)).max(20).optional(),
+  /** Chat only: let the model search the web and read pages for this message. */
+  web: z.boolean().optional(),
 });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
@@ -249,12 +255,39 @@ export type SendEditInput = z.infer<typeof sendEditSchema>;
 
 export interface AssetDto {
   id: string;
-  kind: "upload" | "generated";
+  kind: "upload" | "generated" | "attachment";
   mime: string;
   bytes: number;
   width: number | null;
   height: number | null;
+  favorite: boolean;
+  /** Attachments: the original file name. */
+  name: string | null;
   createdAt: string;
+}
+
+/** One result image in the Library, with where it came from. */
+export interface LibraryItem {
+  assetId: string;
+  threadId: string;
+  threadTitle: string;
+  mode: "image" | "edit";
+  messageId: string;
+  prompt: string;
+  sentPrompt: string;
+  model: string | null;
+  seed: number | null;
+  width: number | null;
+  height: number | null;
+  favorite: boolean;
+  createdAt: string;
+}
+
+export interface LibraryResponse {
+  items: LibraryItem[];
+  total: number;
+  /** Models seen in the Library, for the filter. */
+  models: string[];
 }
 
 export interface ThreadDetailDto {
@@ -281,6 +314,8 @@ export interface SendMessageResponse {
   userMessageId: string;
   /** Chat: the answer being written. Agent runs create their messages step by step, so this is null. */
   assistantMessageId: string | null;
+  /** The message went to a run that is already working; it joins the conversation after the current step. */
+  queued?: boolean;
 }
 
 export interface RequestLogDto {

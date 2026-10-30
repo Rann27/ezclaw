@@ -1,5 +1,9 @@
 import type { ServerResponse } from "node:http";
 import { contextFromAnthropic, contextFromChat, contextFromResponses, isAgentModel, runScript, type Action } from "./agentScripts.js";
+import { randomBytes } from "node:crypto";
+
+/** A short random id part, so tool call ids are unique across steps like a real provider's. */
+const uid = () => randomBytes(4).toString("hex");
 
 type Json = Record<string, unknown>;
 
@@ -32,7 +36,7 @@ export async function agentChat(res: ServerResponse, body: Json): Promise<void> 
   }
   calls.forEach((c, index) => {
     const args = argsOf(c);
-    send(chunk({ tool_calls: [{ index, id: `call_${index}`, type: "function", function: { name: c.tool, arguments: "" } }] }));
+    send(chunk({ tool_calls: [{ index, id: `call_${uid()}_${index}`, type: "function", function: { name: c.tool, arguments: "" } }] }));
     send(chunk({ tool_calls: [{ index, function: { arguments: args.slice(0, Math.ceil(args.length / 2)) } }] }));
     send(chunk({ tool_calls: [{ index, function: { arguments: args.slice(Math.ceil(args.length / 2)) } }] }));
   });
@@ -74,7 +78,7 @@ export async function agentResponses(res: ServerResponse, body: Json): Promise<v
       output.push(item);
     } else {
       const id = `fc_${index}`;
-      const callId = `call_${index}`;
+      const callId = `call_${uid()}_${index}`;
       const args = argsOf(a);
       send("response.output_item.added", { output_index: index, item: { type: "function_call", id, call_id: callId, name: a.tool, arguments: "" } });
       send("response.function_call_arguments.delta", { item_id: id, output_index: index, delta: args.slice(0, Math.ceil(args.length / 2)) });
@@ -115,7 +119,7 @@ export async function agentAnthropic(res: ServerResponse, body: Json): Promise<v
     } else {
       usedTool = true;
       const args = argsOf(a);
-      ev("content_block_start", { index, content_block: { type: "tool_use", id: `toolu_${index}`, name: a.tool, input: {} } });
+      ev("content_block_start", { index, content_block: { type: "tool_use", id: `toolu_${uid()}_${index}`, name: a.tool, input: {} } });
       ev("content_block_delta", { index, delta: { type: "input_json_delta", partial_json: args.slice(0, Math.ceil(args.length / 2)) } });
       ev("content_block_delta", { index, delta: { type: "input_json_delta", partial_json: args.slice(Math.ceil(args.length / 2)) } });
     }

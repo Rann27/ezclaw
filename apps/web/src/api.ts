@@ -43,7 +43,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     throw new ApiError(res.status, body.error.code, body.error.message);
   }
-  return (await res.json()) as T;
+  // 204 No Content (deletes, saves) has no body to parse.
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 /**

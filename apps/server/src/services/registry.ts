@@ -22,6 +22,8 @@ import {
   CUSTOM_PRESET_ID,
   DiscoveryParseError,
   ENDPOINT_PRESETS,
+  EXPERIENTIAL_CATALOG_PAGE,
+  enrichExperiential,
   getEndpointPreset,
   listPath,
   matchPresets,
@@ -306,6 +308,7 @@ export class RegistryService {
       } else {
         try {
           discovered = parseModelList(parser, JSON.parse(text));
+          if (parser === "experiential") discovered = enrichExperiential(discovered, await this.experientialCatalog(row.baseUrl));
         } catch (err) {
           failure = err instanceof DiscoveryParseError ? err.message : "Respons daftar model bukan JSON.";
         }
@@ -334,6 +337,25 @@ export class RegistryService {
     const message = failure ?? "Gagal memuat daftar model.";
     record(false, message);
     return { ok: false, message, modelCount: this.modelCount(id), usedSuggestions: false };
+  }
+
+  /** Experiential Labs' keyless catalog on the endpoint's own host, page by page. Empty when it cannot be read. */
+  private async experientialCatalog(baseUrl: string): Promise<unknown[]> {
+    const out: unknown[] = [];
+    try {
+      const origin = new URL(baseUrl).origin;
+      for (let offset = 0; offset < 5000; offset += EXPERIENTIAL_CATALOG_PAGE) {
+        const res = await this.fetchImpl(`${origin}/api/models?limit=${EXPERIENTIAL_CATALOG_PAGE}&offset=${offset}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS) });
+        if (!res.ok) break;
+        const page = (await res.json()) as { models?: unknown[]; total?: number };
+        const models = Array.isArray(page.models) ? page.models : [];
+        out.push(...models);
+        if (models.length < EXPERIENTIAL_CATALOG_PAGE || (typeof page.total === "number" && out.length >= page.total)) break;
+      }
+    } catch {
+      // The list from /v1/models still works without the extra facts.
+    }
+    return out;
   }
 
   private modelCount(endpointId: string): number {

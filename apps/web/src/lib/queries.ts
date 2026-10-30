@@ -1,6 +1,8 @@
 import type {
   ApprovalRuleDto,
   ModelDto,
+  McpListResponse,
+  SkillListResponse,
   CheckpointListResponse,
   MemoryListResponse,
   WebSearchStatus,
@@ -35,6 +37,8 @@ export const keys = {
   checkpoints: (threadId: string) => ["checkpoints", threadId] as const,
   processes: (threadId: string) => ["processes", threadId] as const,
   webSearch: ["websearch"] as const,
+  mcp: ["mcp"] as const,
+  skills: (workspace: string) => ["skills", workspace] as const,
 };
 
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api<Settings>("/settings") });
@@ -87,6 +91,10 @@ export const useRecentWorkspaces = () => useQuery({ queryKey: keys.workspaces, q
 export const useThreadRules = (threadId: string | undefined) =>
   useQuery({ queryKey: keys.rules(threadId ?? ""), queryFn: () => api<{ rules: ApprovalRuleDto[] }>(`/threads/${threadId}/rules`), enabled: !!threadId });
 
+export const useMcp = (opts: { poll?: boolean } = {}) =>
+  useQuery({ queryKey: keys.mcp, queryFn: () => api<McpListResponse>("/mcp"), ...(opts.poll ? { refetchInterval: 3000 } : {}) });
+export const useSkills = (workspace = "") =>
+  useQuery({ queryKey: keys.skills(workspace), queryFn: () => api<SkillListResponse>(`/skills${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ""}`) });
 export const useMemories = () => useQuery({ queryKey: keys.memories, queryFn: () => api<MemoryListResponse>("/memories") });
 export const useCheckpoints = (threadId: string | undefined) =>
   useQuery({ queryKey: keys.checkpoints(threadId ?? ""), queryFn: () => api<CheckpointListResponse>(`/threads/${threadId}/checkpoints`), enabled: !!threadId });

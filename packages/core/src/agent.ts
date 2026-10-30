@@ -26,8 +26,8 @@ export interface PlanItem {
   status: "pending" | "in_progress" | "completed";
 }
 
-/** "web" is a request that sends something off this computer (a page fetch or a search). */
-export type ApprovalKind = "shell" | "write" | "edit" | "outside" | "web";
+/** "web" is a request that sends something off this computer (a page fetch or a search). "mcp" is a tool of an MCP server. */
+export type ApprovalKind = "shell" | "write" | "edit" | "outside" | "web" | "mcp";
 
 /** What the owner is asked to allow. */
 export interface ApprovalRequest {
@@ -44,6 +44,10 @@ export interface ApprovalRequest {
   reason?: string;
   /** Pattern that "allow always" would remember, as argument words. */
   rulePattern?: string[];
+  /** MCP: the server and tool, and the arguments as sent. */
+  server?: string;
+  tool?: string;
+  args?: string;
 }
 
 export const approvalDecisionSchema = z.object({
@@ -60,6 +64,8 @@ export type RunStopReason = "max_steps" | "blocked";
 /** Events a client sees on a run's SSE stream. */
 export type RunEvent =
   | { type: "start"; messageId: string }
+  /** A message the owner sent while the run was working joined the conversation. */
+  | { type: "user_message"; messageId: string; text: string }
   | { type: "text"; delta: string }
   | { type: "reasoning"; delta: string }
   | { type: "note"; text: string }

@@ -9,7 +9,10 @@ import { EndpointsPage } from "./pages/settings/EndpointsPage";
 import { GeneralPage } from "./pages/settings/GeneralPage";
 import { HarnessPage } from "./pages/settings/HarnessPage";
 import { MemoryPage } from "./pages/settings/MemoryPage";
+import { McpPage } from "./pages/settings/McpPage";
+import { SkillsPage } from "./pages/settings/SkillsPage";
 import { ModelsPage } from "./pages/settings/ModelsPage";
+import { LibraryPage } from "./pages/LibraryPage";
 import { SettingsLayout } from "./pages/settings/SettingsLayout";
 
 function NotFound() {
@@ -72,12 +75,16 @@ const editRoute = createRoute({
   component: EditPage,
 });
 
+const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "library", component: LibraryPage });
+
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "settings", component: SettingsLayout });
 const settingsIndex = createRoute({ getParentRoute: () => settingsRoute, path: "/", component: GeneralPage });
 const settingsEndpoints = createRoute({ getParentRoute: () => settingsRoute, path: "endpoints", component: EndpointsPage });
 const settingsModels = createRoute({ getParentRoute: () => settingsRoute, path: "models", component: ModelsPage });
 const settingsHarness = createRoute({ getParentRoute: () => settingsRoute, path: "harness", component: HarnessPage });
 const settingsMemory = createRoute({ getParentRoute: () => settingsRoute, path: "memory", component: MemoryPage });
+const settingsMcp = createRoute({ getParentRoute: () => settingsRoute, path: "mcp", component: McpPage });
+const settingsSkills = createRoute({ getParentRoute: () => settingsRoute, path: "skills", component: SkillsPage });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -85,7 +92,8 @@ const routeTree = rootRoute.addChildren([
   agentRoute,
   imageRoute,
   editRoute,
-  settingsRoute.addChildren([settingsIndex, settingsEndpoints, settingsModels, settingsHarness, settingsMemory]),
+  libraryRoute,
+  settingsRoute.addChildren([settingsIndex, settingsEndpoints, settingsModels, settingsHarness, settingsMemory, settingsMcp, settingsSkills]),
 ]);
 
 export const router = createRouter({ routeTree });

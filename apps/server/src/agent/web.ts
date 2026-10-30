@@ -138,3 +138,45 @@ export async function searchWeb(provider: WebSearchProvider, key: string, query:
   if (provider === "tavily") return arr(json.results).map((r) => ({ title: str(r.title), url: str(r.url), snippet: str(r.content) }));
   return arr(json.results).map((r) => ({ title: str(r.title), url: str(r.url), snippet: Array.isArray(r.highlights) ? (r.highlights as unknown[]).map(str).join(" … ") : str(r.text).slice(0, 500) }));
 }
+
+const DDG_URL = "https://html.duckduckgo.com/html/";
+
+/** Result links from DuckDuckGo's HTML page; ads are skipped, redirect links (/l/?uddg=) unwrapped. */
+export function parseDuckDuckGo(html: string, count: number): SearchResult[] {
+  const out: SearchResult[] = [];
+  const blocks = html.split(/<div class="result /).slice(1);
+  for (const block of blocks) {
+    if (/^[^"]*result--ad/.test(block)) continue;
+    const link = /class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(block);
+    if (!link) continue;
+    let url = decode(link[1]!);
+    const wrapped = /[?&]uddg=([^&]+)/.exec(url);
+    if (wrapped) url = decodeURIComponent(wrapped[1]!);
+    if (url.startsWith("//")) url = `https:${url}`;
+    if (!/^https?:\/\//.test(url)) continue;
+    const snippet = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/.exec(block)?.[1] ?? "";
+    const strip = (s: string) => decode(s.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+    out.push({ title: strip(link[2]!), url, snippet: strip(snippet) });
+    if (out.length >= count) break;
+  }
+  return out;
+}
+
+/** Search without a key, through DuckDuckGo's HTML page. Used when no keyed service is set or it fails. */
+export async function searchDuckDuckGo(query: string, count: number, signal: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<SearchResult[]> {
+  const res = await fetchImpl(process.env.EZCLAW_DDG_URL || DDG_URL, {
+    method: "POST",
+    signal: AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]),
+    headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36", accept: "text/html" },
+    body: new URLSearchParams({ q: query }).toString(),
+  }).catch((err: unknown) => {
+    if (signal.aborted) throw err;
+    throw new WebError(`DuckDuckGo tidak terjangkau: ${err instanceof Error ? err.message : String(err)}`);
+  });
+  const html = await res.text();
+  const results = res.ok ? parseDuckDuckGo(html, count) : [];
+  if (!results.length && (!res.ok || res.status === 202 || /anomaly|captcha/i.test(html))) {
+    throw new WebError("DuckDuckGo menolak pencarian otomatis untuk sementara. Coba lagi beberapa saat lagi, atau pasang key Brave, Tavily, atau Exa di Settings, bagian Umum.");
+  }
+  return results;
+}

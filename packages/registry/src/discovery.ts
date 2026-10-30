@@ -74,6 +74,7 @@ const PARSERS: Record<DiscoveryParser, (item: Json) => DiscoveredModel | null> =
   openrouter: parseOpenRouter,
   venice: parseVenice,
   anthropic: parseAnthropic,
+  experiential: parseExperiential,
 };
 
 function parseOpenAI(item: Json): DiscoveredModel | null {
@@ -285,4 +286,106 @@ function parseAnthropic(item: Json): DiscoveredModel | null {
   }
 
   return { modelId, name: asString(item.display_name) ?? modelId, kind: "text", patch, meta: { lifecycle: item.lifecycle ?? null } };
+}
+
+/* ---------------------------------------------------------- Experiential Labs */
+
+/** Page size for the keyless public catalog at <host>/api/models, which has the facts /v1/models leaves out. */
+export const EXPERIENTIAL_CATALOG_PAGE = 500;
+
+const NOT_CHAT = /(^|-)(embed|embedding|rerank|parse|moderation|whisper|tts|transcribe)(-|$)|^text-embedding|-batch$/i;
+
+/** /v1/models only says which slugs the key may use; the catalog fills in the rest. */
+function parseExperiential(item: Json): DiscoveredModel | null {
+  const modelId = asString(item.id);
+  if (!modelId) return null;
+  const kind: ModelKind = NOT_CHAT.test(modelId) || IMAGE_MODEL_NAME.test(modelId) ? "other" : "text";
+  return { modelId, name: modelId, kind, patch: {}, meta: { uncensored: item.uncensored === true } };
+}
+
+const NANO = 1_000_000_000;
+
+/**
+ * Merges catalog entries ({ model, providers } from /api/models) into the models the key lists.
+ * Models missing from the catalog keep what /v1/models said.
+ */
+export function enrichExperiential(found: DiscoveredModel[], catalog: unknown[]): DiscoveredModel[] {
+  const bySlug = new Map<string, { model: Json; provider: Json | null }>();
+  for (const entry of catalog) {
+    const e = asRecord(entry);
+    const model = asRecord(e?.model);
+    const slug = asString(model?.slug);
+    if (model && slug) bySlug.set(slug, { model, provider: asRecord(asArray(e?.providers)[0]) });
+  }
+  return found.map((d) => {
+    const hit = bySlug.get(d.modelId);
+    if (!hit) return d;
+    const { model, provider } = hit;
+    const caps = asRecord(provider?.capabilities);
+    const params = asRecord(model.supported_params) ?? {};
+    const output = asArray(model.output_modalities);
+    const input: Modality[] = ["text"];
+    for (const m of asArray(model.input_modalities)) {
+      if (m === "image" && !input.includes("image")) input.push("image");
+      if (m === "pdf" && !input.includes("file")) input.push("file");
+    }
+    // No image endpoint is documented for this gateway, so drawing, video, audio and embedding models stay out of Chat.
+    const kind: ModelKind = output.includes("text") && !NOT_CHAT.test(d.modelId) ? "text" : "other";
+
+    const patch: ProfilePatch = {
+      inputModalities: input,
+      outputModalities: ["text"],
+      contextLength: asNumber(model.max_input_tokens) ?? asNumber(model.context_window),
+      maxOutputTokens: asNumber(model.max_output_tokens) ?? asNumber(caps?.maximum_output_tokens),
+      tools: params.tools === true || caps?.supports_tools === true,
+      stop: params.stop !== false && caps?.supports_stop_sequences !== false,
+      seed: false,
+      jsonMode: params.structured_outputs === true || params.response_format === true,
+    };
+
+    // The gateway refuses sampling fields a model does not take, and some models pin temperature.
+    const sampling: NonNullable<ProfilePatch["sampling"]> = {};
+    for (const param of SAMPLING_PARAMS) {
+      if (param === "temperature" || param === "top_p") {
+        const minT = asNumber(caps?.minimum_temperature);
+        const maxT = asNumber(caps?.maximum_temperature);
+        const pinned = param === "temperature" && minT !== null && minT === maxT;
+        if (params[param] === false || pinned) sampling[param] = null;
+        else if (param === "temperature" && minT !== null && maxT !== null) sampling[param] = { ...SAMPLING_SPEC_DEFAULTS.temperature, min: minT, max: maxT };
+      } else if (param === "top_k" && params.top_k === true) {
+        sampling[param] = { ...SAMPLING_SPEC_DEFAULTS.top_k };
+      } else {
+        sampling[param] = null;
+      }
+    }
+    patch.sampling = sampling;
+
+    const efforts = asArray(caps?.supported_reasoning_efforts).filter((x): x is string => typeof x === "string");
+    if (params.reasoning === true || efforts.length) {
+      const levels = efforts.filter((x) => x !== "none");
+      patch.reasoning = {
+        style: "openai-effort",
+        canDisable: efforts.includes("none"),
+        defaultOn: caps?.reasoning_default_enabled !== false,
+        efforts: levels.length ? levels : ["low", "medium", "high"],
+        defaultEffort: asString(caps?.reasoning_default_effort) ?? undefined,
+        lockedWhileActive: [],
+      };
+    } else {
+      patch.reasoning = { style: "none" };
+    }
+
+    const price = (v: unknown) => (asNumber(v) === null ? null : asNumber(v)! / NANO);
+    return {
+      modelId: d.modelId,
+      name: asString(model.display_name) ?? d.modelId,
+      kind,
+      patch,
+      meta: {
+        ...d.meta,
+        maker: asString(model.maker),
+        pricing: provider ? { inputPerMillion: price(provider.input_nano_usd_per_million), outputPerMillion: price(provider.output_nano_usd_per_million) } : null,
+      },
+    };
+  });
 }

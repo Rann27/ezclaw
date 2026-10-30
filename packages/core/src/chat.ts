@@ -12,7 +12,9 @@ export type Part =
   | { type: "tool_call"; callId: string; name: string; args: unknown; /** Set when the model's arguments were not valid JSON. */ argsError?: string }
   | { type: "tool_result"; callId: string; name: string; output: string; isError?: boolean; denied?: boolean }
   /** A stored image (an asset), uploaded as a reference or produced by an image model. */
-  | { type: "image"; assetId: string; role?: string; seed?: number; /** Filled in just before sending; never stored. */ dataUrl?: string };
+  | { type: "image"; assetId: string; role?: string; seed?: number; /** Filled in just before sending; never stored. */ dataUrl?: string }
+  /** A document attached to a user message, sent to the model as its extracted text. */
+  | { type: "file"; assetId: string; name: string; mime: string; text: string; /** Why the text looks the way it does (a scanned PDF, a cut-off file). */ note?: string };
 
 /**
  * The assistant turn exactly as the provider produced it, in that protocol's own format.

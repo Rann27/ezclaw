@@ -6,6 +6,7 @@ import { api } from "../../api";
 import { keys, useMemories } from "../../lib/queries";
 import { AssetImage } from "../image/AssetImage";
 import { AskPanel, ApprovalPanel, DiffView } from "./Interactions";
+import { MessageAttachments } from "../chat/Attachments";
 import type { CallStatus, LiveAgent, LiveApproval, LiveAsk, LiveCall } from "./useAgentRun";
 
 const Markdown = lazy(() => import("../Markdown").then((m) => ({ default: m.Markdown })));
@@ -42,9 +43,20 @@ function reasoningOf(m: MessageDto): string {
 }
 
 /** What a tool call is about, in a few words. */
+/** mcp__server__tool shows as "server · tool"; other names as they are. */
+export function toolLabel(name: string): { mcp: string | null; name: string } {
+  const m = /^mcp__(.+?)__(.+)$/.exec(name);
+  return m ? { mcp: m[1]!, name: m[2]! } : { mcp: null, name };
+}
+
 export function describeCall(name: string, args: unknown): string {
   const a = (typeof args === "object" && args !== null ? args : {}) as Record<string, unknown>;
   const str = (k: string) => (typeof a[k] === "string" ? (a[k] as string) : "");
+  if (name.startsWith("mcp__")) {
+    // The first short text argument usually says what the call is about.
+    const first = Object.values(a).find((v) => typeof v === "string" && v.length > 0);
+    return typeof first === "string" ? first.replace(/\s+/g, " ").slice(0, 200) : "";
+  }
   switch (name) {
     case "read_file":
       return `${str("path")}${a.start_line ? `:${a.start_line}${a.end_line ? `-${a.end_line}` : ""}` : ""}`;
@@ -134,7 +146,8 @@ function ToolCallCard({
       <details open={open} className="min-w-0 rounded-sm border border-line bg-surface">
         <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2 text-dense">
           <CaretRightIcon size={12} aria-hidden className="chev text-fg-3" />
-          <code className="font-semibold">{call.name}</code>
+          {toolLabel(call.name).mcp && <span className="rounded-xs bg-sunken px-1.5 text-meta text-fg-2">MCP {toolLabel(call.name).mcp}</span>}
+          <code className="font-semibold">{toolLabel(call.name).name}</code>
           <span className="min-w-0 flex-1 truncate text-fg-2">{summary}</span>
           <span className={call.status === "waiting" ? "text-ember-text" : call.status === "error" ? "text-danger-text" : "text-fg-3"}>
             {STATUS_LABEL[call.status]}
@@ -239,7 +252,7 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
       if (m.role !== "tool") continue;
       const images = m.parts.filter((p): p is Extract<Part, { type: "image" }> => p.type === "image");
       if (!images.length) continue;
-      for (const r of m.parts) if (r.type === "tool_result" && r.name === "view_image") map.set(r.callId, images.map((i) => i.assetId));
+      for (const r of m.parts) if (r.type === "tool_result" && (r.name === "view_image" || r.name.startsWith("mcp__"))) map.set(r.callId, images.map((i) => i.assetId));
     }
     return map;
   }, [messages]);
@@ -254,6 +267,7 @@ export function AgentTimeline({ messages, live, running, onShowRequest, onDecide
           const cp = checkpoints.find((c) => c.runMessageId === m.id);
           return (
             <div key={m.id} className="grid justify-items-end gap-1">
+              <MessageAttachments message={m} />
               <div className="max-w-[min(56ch,100%)] whitespace-pre-wrap break-words rounded-md bg-sunken px-4 py-3 text-body">{textOf(m)}</div>
               {cp && (
                 <p className="flex flex-wrap items-center gap-2 text-meta text-fg-3">

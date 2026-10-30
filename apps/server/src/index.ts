@@ -19,6 +19,8 @@ function main() {
   const secrets = createSecretStore(config.dataDir, config.secretStore);
   const services = createServices({ db, secrets, assetsDir: join(config.dataDir, "assets") });
   services.chat.recover();
+  services.mcp.setCallbackBase(`http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`);
+  void services.mcp.startAll();
   void services.registry
     .refreshStaleDiscovery()
     .then((n) => n > 0 && console.log(`[server] Daftar model ${n} endpoint dimuat ulang (cara discovery diperbarui).`))

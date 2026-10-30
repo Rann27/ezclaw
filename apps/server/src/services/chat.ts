@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
+  type Part,
+  type SearchHit,
   type ApprovalMode,
   type HarnessProfile,
   type ImageTurnMeta,
@@ -11,7 +13,7 @@ import {
   type ThreadPatch,
   type ThreadSummary,
 } from "@ezclaw/core";
-import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { loadProjectInstructions, renderPrompt, renderSystemPrompt, withHarnessMessages, type HarnessService, type RenderedPrompt } from "../agent/harness.js";
 import { defaultShell } from "../agent/shell.js";
 import { insertMessage, loadHistory } from "../agent/store.js";
@@ -22,6 +24,10 @@ import { messages, models, requestLogs, threads } from "../db/schema.js";
 import { HttpError } from "../errors.js";
 import type { RunManager } from "../runs.js";
 import type { MemoryService } from "./memory.js";
+import type { McpService } from "../mcp/service.js";
+import type { SkillService } from "./skills.js";
+import { slashSkill, usableSkills } from "../agent/skills.js";
+import { getSettings } from "../settings.js";
 import type { RegistryService } from "./registry.js";
 
 type ThreadRow = typeof threads.$inferSelect;
@@ -42,7 +48,16 @@ export class ChatService {
     private readonly harness: HarnessService,
     private readonly codexDir: () => string | null,
     private readonly memory: MemoryService,
+    private readonly mcp: McpService,
+    private readonly skills: SkillService,
   ) {}
+
+  /** Chat runs through the tool loop when there is something for the model to call. */
+  private chatHasTools(text: string): boolean {
+    if (this.mcp.activeRows("chat").length) return true;
+    const usable = usableSkills(this.skills.discover(null), this.skills.states(), "chat");
+    return usable.length > 0 || !!slashSkill(text, usableSkills(this.skills.discover(null), this.skills.states(), "agent"));
+  }
 
   /** Startup housekeeping: answers cut off by a restart, and old request logs. */
   recover() {
@@ -54,14 +69,56 @@ export class ChatService {
     this.db.delete(requestLogs).where(lt(requestLogs.startedAt, new Date(Date.now() - LOG_RETENTION_MS))).run();
   }
 
-  list(mode: ThreadRow["mode"]): ThreadSummary[] {
+  list(mode: ThreadRow["mode"], archived = false): ThreadSummary[] {
     return this.db
       .select()
       .from(threads)
-      .where(and(eq(threads.mode, mode), isNull(threads.archivedAt)))
-      .orderBy(desc(threads.pinned), desc(threads.updatedAt))
+      .where(and(eq(threads.mode, mode), archived ? isNotNull(threads.archivedAt) : isNull(threads.archivedAt)))
+      .orderBy(desc(threads.pinned), desc(archived ? threads.archivedAt : threads.updatedAt))
       .all()
-      .map((r) => ({ id: r.id, mode: r.mode, title: r.title, pinned: r.pinned, updatedAt: r.updatedAt.toISOString() }));
+      .map((r) => ({ id: r.id, mode: r.mode, title: r.title, pinned: r.pinned, group: r.groupName, archived: r.archivedAt !== null, updatedAt: r.updatedAt.toISOString() }));
+  }
+
+  /** Titles and message text containing `q`, newest first. Plain substring match, case-insensitive. */
+  search(q: string, limit = 60): SearchHit[] {
+    const needle = q.trim();
+    if (needle.length < 2) return [];
+    const like = `%${needle.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+    const lower = needle.toLowerCase();
+    const live = this.db.select().from(threads).where(isNull(threads.archivedAt)).all();
+    const byId = new Map(live.map((t) => [t.id, t]));
+    const hits: SearchHit[] = [];
+    const cut = (text: string, at: number, len: number) => ({
+      before: (at > 60 ? "…" : "") + text.slice(Math.max(0, at - 60), at),
+      match: text.slice(at, at + len),
+      after: text.slice(at + len, at + len + 100) + (text.length > at + len + 100 ? "…" : ""),
+    });
+    for (const t of live) {
+      const at = t.title.toLowerCase().indexOf(lower);
+      if (at >= 0) hits.push({ threadId: t.id, mode: t.mode, title: t.title, in: "title", messageId: null, role: null, ...cut(t.title, at, needle.length), updatedAt: t.updatedAt.toISOString() });
+    }
+    // The parts column is JSON text, so LIKE finds candidates; the real text is checked below.
+    const rows = this.db
+      .select({ id: messages.id, threadId: messages.threadId, role: messages.role, parts: messages.parts, createdAt: messages.createdAt })
+      .from(messages)
+      .where(sql`${messages.parts} LIKE ${like} ESCAPE '\\'`)
+      .orderBy(desc(messages.createdAt))
+      .limit(400)
+      .all();
+    const seen = new Set<string>();
+    for (const m of rows) {
+      const t = byId.get(m.threadId);
+      if (!t || seen.has(m.threadId) || hits.length >= limit) continue;
+      const text = m.parts
+        .map((p) => (p.type === "text" ? p.text : p.type === "tool_result" ? p.output : ""))
+        .join("\n")
+        .replace(/\s+/g, " ");
+      const at = text.toLowerCase().indexOf(lower);
+      if (at < 0) continue;
+      seen.add(m.threadId);
+      hits.push({ threadId: t.id, mode: t.mode, title: t.title, in: "message", messageId: m.id, role: m.role, ...cut(text, at, needle.length), updatedAt: m.createdAt.toISOString() });
+    }
+    return hits.slice(0, limit);
   }
 
   private row(id: string): ThreadRow {
@@ -139,6 +196,7 @@ export class ChatService {
     const set: Partial<typeof threads.$inferInsert> = {};
     if (patch.title !== undefined) set.title = patch.title;
     if (patch.pinned !== undefined) set.pinned = patch.pinned;
+    if (patch.group !== undefined) set.groupName = patch.group;
     if (patch.archived !== undefined) set.archivedAt = patch.archived ? new Date() : null;
     if (patch.systemPrompt !== undefined) set.systemPrompt = patch.systemPrompt;
     if (patch.params !== undefined) set.params = patch.params;
@@ -173,9 +231,32 @@ export class ChatService {
     this.db.delete(threads).where(eq(threads.id, id)).run();
   }
 
-  send(threadId: string, input: SendMessageInput): SendMessageResponse {
+  /**
+   * A model that can look at the images in this message: the chosen one if it can, else the
+   * "vision" role from Settings, else a text model that takes images (same endpoint first).
+   */
+  private visionModel(chosenId: string): { id: string; note: string | null } {
+    const chosen = this.registry.resolveModel(chosenId);
+    if (chosen.resolved.profile.inputModalities.includes("image")) return { id: chosenId, note: null };
+    const all = this.registry.listModels().filter((m) => m.kind === "text" && m.summary.inputModalities.includes("image"));
+    const role = getSettings(this.db).defaultModels.vision;
+    const pick = all.find((m) => m.id === role) ?? all.find((m) => m.endpointId === chosen.endpoint.id && m.favorite) ?? all.find((m) => m.endpointId === chosen.endpoint.id) ?? all.find((m) => m.favorite) ?? all[0];
+    if (!pick) {
+      throw new HttpError(400, "no_vision_model", `${chosen.row.modelId} tidak bisa membaca gambar dan tidak ada model lain yang bisa. Tambahkan model yang menerima gambar, atau atur Cadangan vision di Settings, Umum.`);
+    }
+    return { id: pick.id, note: `${chosen.row.modelId} tidak menerima gambar, jadi pesan ini dijawab ${pick.endpointName} / ${pick.modelId}.` };
+  }
+
+  send(threadId: string, input: SendMessageInput, extraParts: Part[] = []): SendMessageResponse {
     const thread = this.row(threadId);
-    if (this.runs.activeForThread(threadId)) {
+    // Images in this message need a model that can see them; the thread keeps the owner's choice.
+    const vision = extraParts.some((p) => p.type === "image") ? this.visionModel(input.modelId) : { id: input.modelId, note: null };
+    const userParts: Part[] = [{ type: "text", text: input.text }, ...extraParts];
+    const active = this.runs.activeForThread(threadId);
+    if (active) {
+      // An agent run takes the message and reads it after its current step; a plain answer cannot.
+      const runId = this.runs.enqueue(threadId, [{ type: "text", text: input.text }, ...extraParts]);
+      if (runId) return { runId, userMessageId: "", assistantMessageId: null, queued: true };
       throw new HttpError(409, "run_active", "Masih ada jawaban yang berjalan di thread ini. Tunggu selesai atau tekan Stop.");
     }
     if (thread.mode !== "chat" && thread.mode !== "agent") throw new HttpError(400, "unsupported_mode", "Mode thread ini belum bisa dipakai.");
@@ -203,17 +284,38 @@ export class ChatService {
         renderSystemPrompt(profile, { date: "", os: "", shell: defaultShell(), workspace: check.root, approval: thread.approvalMode, modelId: model.row.modelId, userPrompt: "", codexDir: this.codexDir() }, []);
       }
 
-      const user = insertMessage(this.db, { threadId, role: "user", parts: [{ type: "text", text: input.text }], status: "complete" });
+      const user = insertMessage(this.db, { threadId, role: "user", parts: userParts, status: "complete" });
       this.db.update(threads).set({ modelRowId: input.modelId, params, systemPrompt, updatedAt: now, ...titlePatch }).where(eq(threads.id, threadId)).run();
       const runId = this.runs.startAgent({
         threadId,
-        modelRowId: input.modelId,
+        modelRowId: vision.id,
+        ...(vision.note ? { note: vision.note } : {}),
         params,
         approvalMode: thread.approvalMode,
         workspace: check.root,
         harness: thread.harness,
         userPrompt: systemPrompt,
         startMessageId: user.id,
+      });
+      return { runId, userMessageId: user.id, assistantMessageId: null };
+    }
+
+    if (input.web || this.chatHasTools(input.text)) {
+      // Web search, MCP tools or skills for Chat: the same loop as Agent, without a folder.
+      const user = insertMessage(this.db, { threadId, role: "user", parts: userParts, status: "complete" });
+      this.db.update(threads).set({ modelRowId: input.modelId, params, systemPrompt, updatedAt: now, ...titlePatch }).where(eq(threads.id, threadId)).run();
+      const prompt = this.chatPrompt(thread, systemPrompt, model.row.modelId);
+      const runId = this.runs.startAgent({
+        threadId,
+        modelRowId: vision.id,
+        ...(vision.note ? { note: vision.note } : {}),
+        params,
+        approvalMode: "ask",
+        workspace: null,
+        harness: thread.harness,
+        userPrompt: systemPrompt,
+        startMessageId: user.id,
+        chat: { system: prompt.system, developer: prompt.rendered.developer, context: prompt.rendered.context, userTag: prompt.profile?.userTag ?? null, ...(input.web ? { web: true } : {}) },
       });
       return { runId, userMessageId: user.id, assistantMessageId: null };
     }
@@ -226,7 +328,7 @@ export class ChatService {
 
     this.db.transaction((tx) => {
       tx.insert(messages)
-        .values({ id: userId, threadId, seq: nextSeq, role: "user", parts: [{ type: "text", text: input.text }], status: "complete", createdAt: now })
+        .values({ id: userId, threadId, seq: nextSeq, role: "user", parts: userParts, status: "complete", createdAt: now })
         .run();
       tx.insert(messages)
         .values({
@@ -243,12 +345,13 @@ export class ChatService {
       tx.update(threads).set({ modelRowId: input.modelId, params, systemPrompt, updatedAt: now, ...titlePatch }).where(eq(threads.id, threadId)).run();
     });
 
-    history.push({ role: "user", parts: [{ type: "text", text: input.text }] });
+    history.push({ role: "user", parts: userParts });
     const prompt = this.chatPrompt(thread, systemPrompt, model.row.modelId);
     const runId = this.runs.startChat({
       threadId,
       assistantMessageId: assistantId,
-      modelRowId: input.modelId,
+      modelRowId: vision.id,
+      ...(vision.note ? { note: vision.note } : {}),
       system: prompt.system,
       params,
       history: prompt.profile ? withHarnessMessages(history, prompt.rendered, prompt.profile.userTag) : history,

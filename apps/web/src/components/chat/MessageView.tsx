@@ -1,6 +1,7 @@
 import type { MessageDto, Usage } from "@ezclaw/core";
 import { ArrowClockwiseIcon, CheckIcon, CodeIcon, CopyIcon } from "@phosphor-icons/react";
 import { lazy, Suspense, useRef, useState } from "react";
+import { MessageAttachments } from "./Attachments";
 import type { LiveRun } from "./useLiveRun";
 
 // Markdown pulls in the maths and table renderers, so it loads only once an answer is on screen.
@@ -33,7 +34,8 @@ function formatUsage(u: Usage | null): string | null {
 
 export function UserMessage({ message }: { message: MessageDto }) {
   return (
-    <div className="flex justify-end">
+    <div className="grid justify-items-end gap-2">
+      <MessageAttachments message={message} />
       <div className="max-w-[min(56ch,100%)] whitespace-pre-wrap rounded-md bg-sunken px-4 py-3 text-body break-words">{textOf(message)}</div>
     </div>
   );

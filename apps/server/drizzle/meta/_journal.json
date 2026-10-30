@@ -36,6 +36,27 @@
       "when": 1792147689573,
       "tag": "0004_agent_memory",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792739313270,
+      "tag": "0005_mcp_skills",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792907453490,
+      "tag": "0006_library_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793033705660,
+      "tag": "0007_thread_groups",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,8 @@ const TABS = [
   { to: "/settings/models", label: "Model", exact: false },
   { to: "/settings/harness", label: "Harness", exact: false },
   { to: "/settings/memory", label: "Memori", exact: false },
+  { to: "/settings/mcp", label: "MCP", exact: false },
+  { to: "/settings/skills", label: "Skills", exact: false },
 ] as const;
 
 export function SettingsLayout() {
