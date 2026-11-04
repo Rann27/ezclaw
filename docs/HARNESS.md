@@ -127,7 +127,7 @@ Settings, Skills. Skill adalah folder berisi `SKILL.md` dengan front matter `nam
 - Dicari di `.ezclaw/skills`, `.agents/skills`, dan `.claude/skills` di workspace, folder `skills` di data EZClaw, dan folder tambahan di Settings, Umum. Nama yang sama: yang pertama ditemukan menang.
 - Per skill: **Aktif** (dipakai Agent) dan **Chat** (juga dipakai di Chat; bawaan mati).
 - Skill di folder EZClaw bisa diubah, dihapus, dan dibuat dari app. **Impor** menyalin setiap folder ber-`SKILL.md` dari folder lokal, file zip, atau repo GitHub publik (`https://github.com/pemilik/repo/tree/branch/folder`).
-- `/nama-skill` di awal pesan mengirim isi skill bersama request (tanpa menunggu model memanggil `read_skill`) dan menyalakan MCP server yang disebut skill.
+- `/nama-skill` di bagian mana pun dalam pesan, boleh lebih dari satu, mengirim isi skill bersama request (tanpa menunggu model memanggil `read_skill`) dan menyalakan MCP server yang disebut skill.
 - Skill yang dibaca lewat `read_skill` juga menyalakan MCP server-nya; tools server itu tersedia mulai langkah berikutnya dan tetap menyala untuk pesan berikutnya di thread itu. Thread lain tidak ikut membawa tools-nya, jadi server dengan tools besar sebaiknya dimatikan dan dipanggil lewat skill.
 - `read_skill` dengan `file` membaca file pembantu di folder skill. Chat memakai ini karena tidak punya `read_file`.
 

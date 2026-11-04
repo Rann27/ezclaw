@@ -32,7 +32,7 @@ import { selectTools } from "./toolRegistry.js";
 import { clipOutput, ToolArgError, type ToolEnv, type ToolImpl } from "./tools.js";
 import { Workspace } from "./workspace.js";
 import type { ProcessManager } from "./processes.js";
-import { readSkill, skillListing, slashSkill, usableSkills, type Skill } from "./skills.js";
+import { readSkill, skillListing, slashSkills, usableSkills, type Skill } from "./skills.js";
 import type { McpService } from "../mcp/service.js";
 import { mcpTools } from "../mcp/tools.js";
 import type { SkillService } from "../services/skills.js";
@@ -181,8 +181,10 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
   const mcpWanted = new Set<string>();
   const useSkill = (s: Skill) => s.mcp.forEach((m) => mcpWanted.add(m.toLowerCase()));
   const past = loadHistoryEntries(db, input.threadId).map((e) => e.message);
-  // A skill read earlier in this thread keeps its servers on, so the next message needs no second read.
+  const messageText = (m: CanonicalMessage) => m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+  // A skill read or invoked earlier in this thread keeps its servers on, so the next message needs no second read.
   for (const m of past) {
+    if (m.role === "user") slashSkills(messageText(m), skillsUsable).forEach(useSkill);
     for (const p of m.parts) {
       if (p.type !== "tool_call" || p.name !== "read_skill") continue;
       const name = (p.args as { name?: unknown } | null)?.name;
@@ -191,9 +193,8 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
     }
   }
   const lastUser = past.filter((m) => m.role === "user").at(-1);
-  const lastUserText = lastUser?.parts.map((p) => (p.type === "text" ? p.text : "")).join("") ?? "";
-  const invoked = slashSkill(lastUserText, skillsUsable);
-  if (invoked) useSkill(invoked);
+  const invoked = lastUser ? slashSkills(messageText(lastUser), skillsUsable) : [];
+  invoked.forEach(useSkill);
   let tools = [...baseTools, ...(await mcpTools(deps.mcp, deps.mcp.activeRows(mode, mcpWanted)))];
   let toolMap = new Map(tools.map((t) => [t.name, t]));
   let mcpKey = [...mcpWanted].sort().join(",");
@@ -225,11 +226,11 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
   } else {
     system = [input.userPrompt.trim(), skills.length ? skillListing(skills) : ""].filter(Boolean).join("\n\n") || undefined;
   }
-  if (invoked) {
-    // "/skill" in the message: its instructions travel with the request, no read_skill round trip.
-    const block = `The user invoked the skill "${invoked.name}" with /${invoked.name}. Follow its instructions for this request.\n\n<skill name="${invoked.name}">\n${readSkill(invoked)}\n</skill>`;
+  // "/skill" in the message: its instructions travel with the request, no read_skill round trip.
+  for (const skill of invoked) {
+    const block = `The user invoked the skill "${skill.name}" with /${skill.name}. Follow its instructions for this request.\n\n<skill name="${skill.name}">\n${readSkill(skill)}\n</skill>`;
     extraMessages = { ...extraMessages, context: [extraMessages.context, block].filter(Boolean).join("\n\n") };
-    run.emit({ type: "note", text: `Skill ${invoked.name} dipakai.` });
+    run.emit({ type: "note", text: `Skill ${skill.name} dipakai.` });
   }
   const userTag = input.chat ? input.chat.userTag : harnessOn ? profile.userTag : null;
 

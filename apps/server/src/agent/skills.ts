@@ -138,9 +138,12 @@ export function readSkillFile(skill: Skill, file: string): string {
   return readFileSync(abs, "utf8");
 }
 
-/** `/name rest` at the start of a message: the skill the owner invoked, if there is one by that name. */
-export function slashSkill(text: string, skills: Skill[]): Skill | null {
-  const m = /^\/([A-Za-z0-9][\w-]*)(?:\s|$)/.exec(text.trim());
-  if (!m) return null;
-  return skills.find((s) => s.name.toLowerCase() === m[1]!.toLowerCase()) ?? null;
+/** Every `/name` in a message that names a skill, in order. `and/or` and `/usr/bin` are not such words. */
+export function slashSkills(text: string, skills: Skill[]): Skill[] {
+  const found = new Set<Skill>();
+  for (const m of text.matchAll(/(?:^|\s)\/([A-Za-z0-9][\w-]*)(?=$|[\s.,;:!?)\]])/g)) {
+    const skill = skills.find((s) => s.name.toLowerCase() === m[1]!.toLowerCase());
+    if (skill) found.add(skill);
+  }
+  return [...found];
 }

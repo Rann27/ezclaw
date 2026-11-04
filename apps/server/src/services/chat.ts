@@ -26,7 +26,7 @@ import type { RunManager } from "../runs.js";
 import type { MemoryService } from "./memory.js";
 import type { McpService } from "../mcp/service.js";
 import type { SkillService } from "./skills.js";
-import { slashSkill, usableSkills } from "../agent/skills.js";
+import { slashSkills, usableSkills } from "../agent/skills.js";
 import { getSettings } from "../settings.js";
 import type { RegistryService } from "./registry.js";
 
@@ -56,7 +56,7 @@ export class ChatService {
   private chatHasTools(text: string): boolean {
     if (this.mcp.activeRows("chat").length) return true;
     const usable = usableSkills(this.skills.discover(null), this.skills.states(), "chat");
-    return usable.length > 0 || !!slashSkill(text, usableSkills(this.skills.discover(null), this.skills.states(), "agent"));
+    return usable.length > 0 || slashSkills(text, usableSkills(this.skills.discover(null), this.skills.states(), "agent")).length > 0;
   }
 
   /** Startup housekeeping: answers cut off by a restart, and old request logs. */

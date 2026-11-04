@@ -24,10 +24,24 @@ export function useSlashItems(mode: "agent" | "chat", workspace = ""): SlashItem
   }, [skills.data, mcp.data, mode]);
 }
 
-/** The text after "/" while the first word of the message is still being typed, else null. */
-export function slashQuery(text: string): string | null {
-  const m = /^\/([\w:-]*)$/.exec(text);
-  return m ? m[1]!.toLowerCase() : null;
+export interface SlashToken {
+  /** The part a pick replaces: from the "/" to the caret, so text after the caret is never lost. */
+  start: number;
+  end: number;
+  /** That part without the "/", in lower case. */
+  query: string;
+}
+
+/**
+ * The "/word" the caret is in, at the start of the text or after a space, else null.
+ * A negative caret means a selection. "and/or" and "/usr/bin" are not words like this.
+ */
+export function slashQuery(text: string, caret: number): SlashToken | null {
+  if (caret < 0) return null;
+  const m = /(?:^|\s)\/([\w:-]*)$/.exec(text.slice(0, caret));
+  if (!m) return null;
+  if (text[caret] === "/") return null;
+  return { start: caret - m[1]!.length - 1, end: caret, query: m[1]!.toLowerCase() };
 }
 
 export function filterSlash(items: SlashItem[], query: string): SlashItem[] {

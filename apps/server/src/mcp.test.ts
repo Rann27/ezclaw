@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { EndpointDto, McpListResponse, McpServerDto, ModelDto, ModelListResponse, RunEvent, SendMessageResponse, SkillDto, SkillListResponse, ThreadDetailDto } from "@ezclaw/core";
 import { zipSync } from "fflate";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { readSkillFile } from "./agent/skills.js";
+import { readSkillFile, slashSkills } from "./agent/skills.js";
 import { collectRun, createTestContext, type TestContext } from "./testing/harness.js";
 import { startMockProvider, type MockProvider } from "./testing/mockProvider.js";
 
@@ -300,6 +300,33 @@ describe("skills", () => {
     const first = JSON.stringify(mock.requests.find((r) => r.path.endsWith("/chat/completions"))!.body);
     expect(first).toContain("INSTRUKSI-SKILL-UNIK");
     expect(first).toContain("mcp__tester__echo");
+  });
+
+  it("/skill-name works anywhere in the message, for several skills, and keeps the server on", async () => {
+    await addTester({ enabled: false });
+    await ctx.json("/api/skills", post({ name: "pakai-tester", description: "Satu.", body: "INSTRUKSI-SATU", mcp: ["tester"] }));
+    await ctx.json("/api/skills", post({ name: "skill-dua", description: "Dua.", body: "INSTRUKSI-DUA" }));
+    const m = await model("echo");
+    const t = await agentThread(m, true);
+    const events = await collectRun(ctx, (await send(t.id, m.id, "Tolong pakai /pakai-tester lalu /skill-dua, bukan /tidak-ada.")).runId);
+    expect(events.filter((e) => e.type === "note" && e.text.includes("dipakai"))).toHaveLength(2);
+    const first = JSON.stringify(mock.requests.find((r) => r.path.endsWith("/chat/completions"))!.body);
+    expect(first).toContain("INSTRUKSI-SATU");
+    expect(first).toContain("INSTRUKSI-DUA");
+    expect(first).toContain("mcp__tester__echo");
+    const before = mock.requests.length;
+    await collectRun(ctx, (await send(t.id, m.id, "lanjut")).runId);
+    const next = JSON.stringify(mock.requests[before]!.body);
+    expect(next).toContain("mcp__tester__echo");
+    expect(next).not.toContain("The user invoked the skill");
+  });
+
+  it("slashSkills ignores paths and words that only contain a slash", () => {
+    const skill = { id: "x", name: "qa", description: "", dir: "", file: "", source: "EZClaw", mcp: [] };
+    expect(slashSkills("/qa", [skill])).toEqual([skill]);
+    expect(slashSkills("cek /QA, lalu /qa lagi", [skill])).toEqual([skill]);
+    expect(slashSkills("baris satu\n/qa baris dua", [skill])).toEqual([skill]);
+    for (const text of ["dan/qa", "/qa/scripts", "C:/qa", "/qa-lain"]) expect(slashSkills(text, [skill])).toEqual([]);
   });
 
   it("a switched-off skill is not listed for the model", async () => {

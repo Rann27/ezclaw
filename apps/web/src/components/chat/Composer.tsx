@@ -1,11 +1,11 @@
 import type { ModelDto } from "@ezclaw/core";
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { api } from "../../api";
 import { Dialog } from "../Dialog";
 import { ModelChip } from "../ModelPicker";
-import { filterSlash, SlashList, slashQuery, type SlashItem } from "./SlashMenu";
+import { filterSlash, SlashList, slashQuery, type SlashItem, type SlashToken } from "./SlashMenu";
 import { AttachmentTray, type PendingAttachment } from "./Attachments";
 
 interface ComposerProps {
@@ -28,7 +28,7 @@ interface ComposerProps {
   blockedBecause?: string | null;
   /** Shown at the end of the footer row, before the send button. */
   trailing?: ReactNode;
-  /** Skills and MCP prompts offered when the message starts with "/". */
+  /** Skills and MCP prompts offered when a word in the message starts with "/". */
   slash?: SlashItem[];
   /** Lets the owner attach images and documents (Chat). */
   attachments?: boolean;
@@ -59,24 +59,49 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [promptItem, setPromptItem] = useState<Extract<SlashItem, { kind: "prompt" }> | null>(null);
-  const query = slashQuery(text);
-  const matches = query !== null && query !== dismissed ? filterSlash(slash, query) : [];
+  const [caret, setCaret] = useState(0);
+  const token = slashQuery(text, caret);
+  const tokenKey = token ? `${token.start}:${token.query}` : null;
+  const matches = token && tokenKey !== dismissed ? filterSlash(slash, token.query) : [];
   const menuOpen = matches.length > 0;
+  /** The word an MCP prompt replaces once its arguments are in. */
+  const promptToken = useRef<SlashToken | null>(null);
+  /** Where the caret goes after text changes from code rather than typing. */
+  const nextCaret = useRef<number | null>(null);
 
-  useEffect(() => setActive(0), [query]);
+  useEffect(() => setActive(0), [tokenKey]);
+
+  useLayoutEffect(() => {
+    if (nextCaret.current === null) return;
+    area.current?.setSelectionRange(nextCaret.current, nextCaret.current);
+    setCaret(nextCaret.current);
+    nextCaret.current = null;
+  }, [text]);
+
+  function trackCaret(el: HTMLTextAreaElement) {
+    setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : -1);
+  }
+
+  function replaceToken(at: SlashToken, insert: string) {
+    setText((t) => `${t.slice(0, at.start)}${insert}${t.slice(at.end).replace(/^ /, "")}`);
+    nextCaret.current = at.start + insert.length;
+    area.current?.focus();
+  }
 
   async function insertPrompt(item: Extract<SlashItem, { kind: "prompt" }>, args: Record<string, string>) {
     const res = await api<{ text: string }>(`/mcp/${item.serverId}/prompts/${encodeURIComponent(item.prompt.name)}`, { method: "POST", body: JSON.stringify({ arguments: args }) });
-    setText(res.text);
-    area.current?.focus();
+    replaceToken(promptToken.current!, `${res.text} `);
   }
 
   function pick(item: SlashItem) {
     if (item.kind === "skill") {
-      setText(`/${item.name} `);
-      area.current?.focus();
-    } else if (item.prompt.arguments.length) setPromptItem(item);
-    else void insertPrompt(item, {}).catch(() => setText(""));
+      replaceToken(token!, `/${item.name} `);
+      return;
+    }
+    promptToken.current = token;
+    // A failed prompt leaves the typed word in place, so nothing else in the message is lost.
+    if (item.prompt.arguments.length) setPromptItem(item);
+    else void insertPrompt(item, {}).catch(() => {});
   }
 
   useEffect(() => {
@@ -126,7 +151,7 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        setDismissed(query);
+        setDismissed(tokenKey);
         return;
       }
     }
@@ -177,7 +202,11 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
           ref={area}
           rows={2}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            trackCaret(e.target);
+          }}
+          onSelect={(e) => trackCaret(e.currentTarget)}
           onKeyDown={onKeyDown}
           onPaste={
             canAttach
