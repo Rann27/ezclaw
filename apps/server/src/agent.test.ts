@@ -337,6 +337,27 @@ describe("tools", () => {
     expect(events.at(-1)).toMatchObject({ type: "done", status: "complete", stopReason: "max_steps" });
   });
 
+  it("stops once the cost the provider reports reaches the profile's limit", async () => {
+    const copy = await ctx.json<HarnessProfile>("/api/harness/ezclaw-agent/duplicate", { method: "POST" });
+    await ctx.json(`/api/harness/${copy.id}`, patch({ loop: { maxCostUsd: 1 } }));
+    const { model, thread } = await setup("agent-loop-costly", "openai-chat", { harness: { on: true, profileId: copy.id, tools: [] } });
+    const events = await collectRun(ctx, (await send(thread.id, model.id)).runId);
+    // $0.30 a step: $0.90 after three steps, $1.20 after the fourth, so no fifth.
+    expect(events.filter((e) => e.type === "step_start")).toHaveLength(4);
+    expect(events.at(-1)).toMatchObject({ type: "done", status: "complete", stopReason: "max_cost" });
+    const last = (await getThread(thread.id)).messages.at(-1)!;
+    expect(JSON.stringify(last.parts)).toContain("batas $1.00");
+  });
+
+  it("says when the cost limit cannot hold because the provider reports no cost", async () => {
+    const copy = await ctx.json<HarnessProfile>("/api/harness/ezclaw-agent/duplicate", { method: "POST" });
+    await ctx.json(`/api/harness/${copy.id}`, patch({ loop: { maxCostUsd: 1, limitSteps: true, maxSteps: 2 } }));
+    const { model, thread } = await setup("agent-loop", "openai-chat", { harness: { on: true, profileId: copy.id, tools: [] } });
+    const events = await collectRun(ctx, (await send(thread.id, model.id)).runId);
+    expect(events.filter((e) => e.type === "note" && e.text.includes("tidak melaporkan biaya"))).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({ stopReason: "max_steps" });
+  });
+
   it("applies a multi-file patch atomically", async () => {
     const { model, thread } = await setup("agent-patch", "openai-chat", { harness: { on: false, profileId: "ezclaw-agent", tools: ["apply_patch"] } });
     await setMode(thread.id, "edit");

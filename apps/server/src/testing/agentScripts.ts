@@ -64,6 +64,8 @@ export const SCRIPTS: Record<string, Script> = {
     step === 0 ? [{ tool: "read_file", args: {}, rawArgs: '{"path": "hello.txt"' }] : done(`Galat diterima: ${lastResult?.slice(0, 80) ?? "?"}`),
   "agent-unknown-tool": ({ step, lastResult }) => (step === 0 ? [{ tool: "fly_to_moon", args: {} }] : done(`Respons: ${lastResult?.slice(0, 60) ?? "?"}`)),
   "agent-loop": () => [{ tool: "list_dir", args: { path: ".", depth: 1 } }],
+  // Never ends, and the mock reports $0.30 per call for it.
+  "agent-loop-costly": () => [{ tool: "list_dir", args: { path: ".", depth: 1 } }],
   "agent-patch": ({ step }) =>
     step === 0
       ? [{ tool: "apply_patch", args: { input: "*** Begin Patch\n*** Update File: a.txt\n@@\n-foo\n+bar\n*** Add File: b.txt\n+baru\n*** End Patch" } }]

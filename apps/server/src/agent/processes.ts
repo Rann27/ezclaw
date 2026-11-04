@@ -42,7 +42,7 @@ export class ProcessManager {
   start(threadId: string, command: string, cwd: string, shell: ShellKind): ProcessView {
     const running = [...this.procs.values()].filter((p) => p.threadId === threadId && p.running);
     if (running.length >= MAX_PER_THREAD) throw new Error(`Sudah ada ${running.length} proses berjalan di thread ini. Hentikan salah satu dengan stop_process dulu.`);
-    const { file, args } = spawnArgs(shell, command);
+    const { file, args } = spawnArgs(shell, command, cwd);
     const child = spawn(file, args, { cwd, env: cleanEnv(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
     const id = `p${++this.counter}`;
     const proc: Proc = { id, threadId, command, cwd, child, output: "", dropped: 0, readUpTo: 0, exitCode: null, running: true, startedAt: Date.now() };

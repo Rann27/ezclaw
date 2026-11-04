@@ -19,11 +19,21 @@ import { getSettings } from "../settings.js";
 import { parseAnthropicStream } from "./anthropicStream.js";
 import { buildHeaders, joinUrl, networkError, parseProviderError, ProviderError, redactHeaders } from "./http.js";
 import { parseOpenAIStream } from "./openaiStream.js";
+import { isQuotaError, rateLimiter, retryAfterMs, sleep } from "./rateLimit.js";
 import { parseResponsesStream } from "./responsesStream.js";
 
 const IDLE_TIMEOUT_MS = 180_000;
 const MAX_LOGGED_RESPONSE = 8000;
 const RETRYABLE_STATUS = new Set([400, 422]);
+/** Waits before each retry of a 429 that names no wait of its own; also the retry budget. */
+const RATE_LIMIT_BACKOFF_MS = [6_000, 12_000, 24_000, 48_000];
+const MAX_RATE_LIMIT_WAIT_MS = 120_000;
+/**
+ * Statuses that mean the provider (or the CDN in front of it) failed, not the request: Cloudflare's
+ * 52x, overloaded 529. Sent again after a wait, like a dropped connection, as long as nothing streamed.
+ */
+const SERVER_ERROR_STATUS = new Set([500, 502, 503, 504, 520, 521, 522, 523, 524, 529]);
+const SERVER_ERROR_BACKOFF_MS = [5_000, 15_000, 30_000, 60_000];
 
 export interface ToolCallRequest {
   callId: string;
@@ -95,8 +105,30 @@ export async function callModel(deps: ModelCallDeps, args: ModelCallArgs, acc: T
   const sessionOmit: string[] = [];
   const autoRetry = getSettings(db).autoRetryRejectedParams;
   const protocol = endpoint.protocol as Protocol;
+  const rpm = endpoint.rateLimitRpm ?? null;
+  let paramRetried = false;
+  let rateRetries = 0;
+  let serverRetries = 0;
+  let explainedPause = false;
+  /** Waits before sending the same request again after a server error or a dropped connection; false when the retries are used up. */
+  const backOff = async (why: string, headers?: Headers): Promise<boolean> => {
+    if (serverRetries >= SERVER_ERROR_BACKOFF_MS.length) return false;
+    const wait = Math.min(headers ? retryAfterMs(headers) ?? SERVER_ERROR_BACKOFF_MS[serverRetries]! : SERVER_ERROR_BACKOFF_MS[serverRetries]!, MAX_RATE_LIMIT_WAIT_MS);
+    serverRetries++;
+    note(`${why} Mencoba lagi dalam ${Math.ceil(wait / 1000)} dtk (${serverRetries} dari ${SERVER_ERROR_BACKOFF_MS.length}).`);
+    await sleep(wait, args.signal);
+    return true;
+  };
 
   for (let attempt = 1; ; attempt++) {
+    // Short pauses happen every few steps under a tight limit; only the noticeable ones get a note.
+    await rateLimiter.acquire(endpoint.id, rpm, args.signal, (ms, why) => {
+      const secs = Math.ceil(ms / 1000);
+      if (why === "limit" && ms >= 3000) note(`Menunggu ${secs} dtk agar tidak melewati ${rpm} request/menit di ${endpoint.name}.`);
+      if (why === "paused" && !explainedPause) note(`${endpoint.name} sedang membatasi request; menunggu ${secs} dtk.`);
+    });
+    explainedPause = false;
+
     const built = buildChatRequest({
       protocol,
       modelId: model.row.modelId,
@@ -151,16 +183,33 @@ export async function callModel(deps: ModelCallDeps, args: ModelCallArgs, acc: T
       } catch (err) {
         if (args.signal.aborted) throw err;
         if (idle.signal.aborted) throw new ProviderError(`Tidak ada respons dari ${endpoint.name} selama ${IDLE_TIMEOUT_MS / 1000} detik.`, { network: true });
-        throw networkError(conn, err);
+        const nerr = networkError(conn, err);
+        // A local server that is not running will not start by waiting.
+        if (!conn.isLocal && !/^https?:\/\/(localhost|127\.|\[::1\])/i.test(endpoint.baseUrl)) {
+          logDone({ error: nerr.message });
+          if (await backOff(`Koneksi ke ${endpoint.name} gagal.`)) continue;
+        }
+        throw nerr;
       }
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
         logDone({ status: res.status, responseText: errText.slice(0, MAX_LOGGED_RESPONSE) });
         const perr = parseProviderError(res.status, errText, conn);
-        if (autoRetry && attempt === 1 && RETRYABLE_STATUS.has(res.status)) {
+        // A rate limit: wait as long as the provider asks (or back off), then send the same request again.
+        if (res.status === 429 && !isQuotaError(errText) && rateRetries < RATE_LIMIT_BACKOFF_MS.length) {
+          const wait = Math.min(retryAfterMs(res.headers) ?? RATE_LIMIT_BACKOFF_MS[rateRetries]!, MAX_RATE_LIMIT_WAIT_MS);
+          rateRetries++;
+          rateLimiter.pause(endpoint.id, wait);
+          explainedPause = true;
+          note(`${endpoint.name} membalas 429 (batas request). Mencoba lagi dalam ${Math.ceil(wait / 1000)} dtk (${rateRetries} dari ${RATE_LIMIT_BACKOFF_MS.length}).`);
+          continue;
+        }
+        if (SERVER_ERROR_STATUS.has(res.status) && (await backOff(`${endpoint.name} sedang bermasalah (${res.status}).`, res.headers))) continue;
+        if (autoRetry && !paramRetried && RETRYABLE_STATUS.has(res.status)) {
           const key = findRejectedKey({ message: perr.opts.raw ?? "", param: perr.opts.param, bodyKeys: Object.keys(built.body) });
           if (key) {
+            paramRetried = true;
             registry.learnOmit(args.modelRowId, key);
             sessionOmit.push(key);
             note(`Field "${key}" ditolak model ini, jadi dikirim ulang tanpanya. Model ini tidak akan menerimanya lagi (bisa dibatalkan di Profil model).`);

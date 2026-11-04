@@ -1,0 +1,1 @@
+ALTER TABLE `endpoints` ADD `rate_limit_rpm` integer;

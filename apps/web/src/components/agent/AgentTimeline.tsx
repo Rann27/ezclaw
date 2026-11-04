@@ -164,13 +164,6 @@ function ToolCallCard({
             <summary className="cursor-pointer text-meta text-fg-3">Argumen</summary>
             <pre className="m-0 mt-1 max-h-48 overflow-auto rounded-sm bg-sunken p-2 font-code text-meta whitespace-pre-wrap break-words">{argsText}</pre>
           </details>
-          {call.images && call.images.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {call.images.map((id) => (
-                <AssetImage key={id} assetId={id} alt={`Gambar dari ${describeCall(call.name, call.args)}`} className="max-h-48 w-auto rounded-sm border border-line" contain />
-              ))}
-            </div>
-          )}
           {call.output !== undefined && (
             <div className="grid gap-1">
               <span className="text-meta text-fg-3">Hasil</span>
@@ -179,6 +172,13 @@ function ToolCallCard({
           )}
         </div>
       </details>
+      {call.images && call.images.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {call.images.map((id) => (
+            <AssetImage key={id} assetId={id} alt={`Gambar dari ${describeCall(call.name, call.args)}`} className="max-h-[32rem] w-auto max-w-full rounded-sm border border-line" contain />
+          ))}
+        </div>
+      )}
       {call.name === "propose_memory" && call.status === "done" && <MemoryProposal threadId={threadId} text={String((call.args as { text?: unknown })?.text ?? "")} />}
       {call.approval && <ApprovalPanel approval={call.approval} onDecide={(d, r) => onDecide(call.approval!.approvalId, d, r)} />}
       {call.ask && <AskPanel ask={call.ask} onAnswer={(a) => onAnswer(call.ask!.askId, a)} />}

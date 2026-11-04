@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
 export interface Skill {
   /** Stable id derived from the SKILL.md path. */
@@ -124,8 +124,18 @@ export function readSkill(skill: Skill): string {
   } catch {
     // The listing is a convenience.
   }
-  const extra = files.length ? `\n\n---\nFile lain di folder skill (${skill.dir}):\n${files.map((f) => `- ${f}`).join("\n")}\nBaca dengan read_file memakai path absolut bila perlu.` : "";
+  const extra = files.length ? `\n\n---\nFile lain di folder skill (${skill.dir}):\n${files.map((f) => `- ${f}`).join("\n")}\nBaca dengan read_skill memakai name dan file bila perlu.` : "";
   return `${text}${extra}`;
+}
+
+/** A helper file of a skill, by its path inside the skill's folder. Chat has no read_file, so this is how it reaches them. */
+export function readSkillFile(skill: Skill, file: string): string {
+  const abs = resolve(skill.dir, file);
+  const rel = relative(skill.dir, abs);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`"${file}" ada di luar folder skill ${skill.name}.`);
+  if (!existsSync(abs) || !statSync(abs).isFile()) throw new Error(`Skill ${skill.name} tidak punya file "${file}".`);
+  if (statSync(abs).size > MAX_SKILL_BYTES) throw new Error(`File "${file}" terlalu besar untuk dibaca.`);
+  return readFileSync(abs, "utf8");
 }
 
 /** `/name rest` at the start of a message: the skill the owner invoked, if there is one by that name. */

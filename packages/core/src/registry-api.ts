@@ -48,6 +48,8 @@ export const endpointInputSchema = z
       .record(z.string(), z.string())
       .refine((h) => Object.keys(h).every((k) => headerNameRe.test(k)), "Nama header tidak valid.")
       .optional(),
+    /** Requests per minute EZClaw sends to this endpoint at most; null = no limit. */
+    rateLimitRpm: z.number().int().min(1).max(10_000).nullable().optional(),
     /** Only on create; use PUT /endpoints/:id/key afterwards. */
     apiKey: z.string().trim().min(1).max(4096).optional(),
   })
@@ -61,6 +63,7 @@ export const endpointPatchSchema = z
     auth: authSchema,
     family: z.string().trim().max(40).nullable(),
     extraHeaders: z.record(z.string(), z.string()),
+    rateLimitRpm: z.number().int().min(1).max(10_000).nullable(),
   })
   .partial()
   .strict();
@@ -78,6 +81,8 @@ export interface EndpointDto {
   baseUrl: string;
   auth: AuthDto;
   extraHeaders: Record<string, string>;
+  /** Requests per minute EZClaw sends at most; null = no limit. */
+  rateLimitRpm: number | null;
   needsKey: boolean;
   hasKey: boolean;
   keyLast4: string | null;

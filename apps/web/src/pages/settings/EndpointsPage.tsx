@@ -147,7 +147,7 @@ function EndpointCard({
           <p className="break-all font-code text-dense text-fg-2">{ep.baseUrl}</p>
           <p className="text-dense text-fg-3">
             {PROTOCOL_LABELS[ep.protocol]}
-            {ep.family && ep.presetId === "custom" ? `, parameter seperti ${ep.family}` : ""} · {ep.modelCount} model
+            {ep.family && ep.presetId === "custom" ? `, parameter seperti ${ep.family}` : ""} · {ep.modelCount} model{ep.rateLimitRpm ? ` · maks ${ep.rateLimitRpm} request/menit` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-dense">

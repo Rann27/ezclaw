@@ -113,6 +113,13 @@ describe("running commands", () => {
     expect((await pending).stopped).toBe(true);
   });
 
+  it("runs in the workspace even when its path has [ ] and ' (PowerShell reads [ ] as a wildcard)", async () => {
+    const odd = join(root, "[!SUPER PRIORITY] [NEW] it's");
+    mkdirSync(odd, { recursive: true });
+    const r = await runShell({ command: node("console.log(process.cwd())"), cwd: odd, shell: defaultShell(), timeoutMs: 15000, signal: new AbortController().signal });
+    expect(r.output.trim()).toBe(odd);
+  });
+
   it("keeps the start and end of very long output", async () => {
     const r = await runShell({ command: node("console.log('A'.repeat(400000)); console.log('AKHIR')"), cwd: root, shell: defaultShell(), timeoutMs: 20000, signal: new AbortController().signal });
     expect(r.droppedBytes).toBeGreaterThan(0);

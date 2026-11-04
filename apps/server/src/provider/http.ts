@@ -80,7 +80,7 @@ export function parseProviderError(status: number, text: string, conn: Pick<Conn
     // Not JSON: HTML error page or plain text.
   }
   const { message, param, code } = pickMessage(parsed);
-  const raw = (message ?? text).trim().slice(0, 2000);
+  const raw = (message ?? htmlSummary(text) ?? text).trim().slice(0, 2000);
   const detail = raw ? ` Pesan provider: ${raw}` : "";
 
   let friendly: string;
@@ -101,9 +101,23 @@ export function parseProviderError(status: number, text: string, conn: Pick<Conn
       friendly = `${conn.name} membatasi laju request (429). Tunggu sebentar lalu coba lagi.${detail}`;
       break;
     default:
-      friendly = status >= 500 ? `${conn.name} sedang bermasalah (${status}).${detail}` : `${conn.name} menolak request (${status}).${detail}`;
+      friendly = status >= 500 ? `${conn.name} sedang bermasalah (${status}), biasanya gangguan sementara di sisi provider. Coba lagi beberapa saat lagi.${detail}` : `${conn.name} menolak request (${status}).${detail}`;
   }
   return new ProviderError(friendly, { status, param, code, raw });
+}
+
+/** An HTML error page (a CDN's 52x, a proxy's 502) reduced to its title, or its text when it has none. Null for anything else. */
+export function htmlSummary(text: string): string | null {
+  if (!/^\s*(<!doctype html|<html|<!--)/i.test(text)) return null;
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text)?.[1];
+  const plain = (title ?? text.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " "))
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain ? `${plain.slice(0, 300)} (halaman error HTML)` : "halaman error HTML tanpa teks";
 }
 
 export function networkError(conn: Pick<ConnectionInfo, "name" | "isLocal" | "baseUrl">, cause: unknown): ProviderError {

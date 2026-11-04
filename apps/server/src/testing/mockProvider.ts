@@ -155,6 +155,21 @@ export async function startMockProvider(port = 0): Promise<MockProvider> {
         return json(r.status, r.payload);
       }
       if (model === "unauthorized") return json(401, { error: { message: "Incorrect API key provided: sk-...", code: "invalid_api_key" } });
+      // Rate limited on every other request (Retry-After: 1), answered normally in between.
+      if (model === "flaky-429" && requests.filter((r) => r.body?.model === "flaky-429").length % 2 === 1) {
+        res.writeHead(429, { "content-type": "application/json", "retry-after": "1" });
+        return res.end(JSON.stringify({ error: { message: "Rate limit exceeded: 10 requests per minute.", type: "rate_limit_error", code: "rate_limit_exceeded" } }));
+      }
+      // A CDN error page on every other request, answered normally in between.
+      if (model === "flaky-520" && requests.filter((r) => r.body?.model === "flaky-520").length % 2 === 1) {
+        res.writeHead(520, { "content-type": "text/html", "retry-after": "1" });
+        return res.end('<!DOCTYPE html><html lang="en-US"><head><title>example.ai | 520: Web server is returning an unknown error</title></head><body><div id="cf-wrapper">Error code 520</div></body></html>');
+      }
+      if (model === "down-503") {
+        res.writeHead(503, { "content-type": "text/html", "retry-after": "0" });
+        return res.end("<html><head><title>503 Service Unavailable</title></head><body>down</body></html>");
+      }
+      if (model === "quota-429") return json(429, { error: { message: "You exceeded your current quota, please check your plan and billing details.", type: "insufficient_quota", code: "insufficient_quota" } });
       if (model === "reject-top_p" && body && "top_p" in body) {
         return json(400, { error: { message: "Unsupported parameter: 'top_p' is not supported with this model.", param: "top_p", code: "unsupported_parameter" } });
       }

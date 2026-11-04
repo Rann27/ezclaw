@@ -111,6 +111,7 @@ export class RegistryService {
       baseUrl: row.baseUrl,
       auth: { type: row.authType, ...(row.authHeader ? { headerName: row.authHeader } : {}) },
       extraHeaders: row.extraHeaders,
+      rateLimitRpm: row.rateLimitRpm ?? null,
       needsKey: needsKey && row.authType !== "none",
       hasKey: row.keyLast4 !== null,
       keyLast4: row.keyLast4,
@@ -167,6 +168,7 @@ export class RegistryService {
         authType: input.auth.type,
         authHeader: input.auth.type === "header" ? (input.auth.headerName ?? null) : null,
         extraHeaders: input.extraHeaders ?? {},
+        rateLimitRpm: input.rateLimitRpm ?? null,
         keyLast4: null,
         createdAt: now,
       })
@@ -198,6 +200,7 @@ export class RegistryService {
       set.family = patch.family;
     }
     if (patch.extraHeaders !== undefined) set.extraHeaders = patch.extraHeaders;
+    if (patch.rateLimitRpm !== undefined) set.rateLimitRpm = patch.rateLimitRpm;
     if (Object.keys(set).length) this.db.update(endpoints).set(set).where(eq(endpoints.id, id)).run();
     return this.getEndpoint(id);
   }

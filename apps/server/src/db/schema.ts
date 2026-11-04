@@ -22,6 +22,8 @@ export const endpoints = sqliteTable("endpoints", {
   authType: text("auth_type", { enum: ["bearer", "header", "none"] }).notNull(),
   authHeader: text("auth_header"),
   extraHeaders: text("extra_headers", { mode: "json" }).$type<Record<string, string>>().notNull().default({}),
+  /** Requests per minute EZClaw sends at most (a provider's rate limit); null = no limit. */
+  rateLimitRpm: integer("rate_limit_rpm"),
   keyLast4: text("key_last4"),
   lastTestAt: integer("last_test_at", { mode: "timestamp_ms" }),
   lastTestOk: integer("last_test_ok", { mode: "boolean" }),

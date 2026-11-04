@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { EndpointDto, McpListResponse, McpServerDto, ModelDto, ModelListResponse, RunEvent, SendMessageResponse, SkillDto, SkillListResponse, ThreadDetailDto } from "@ezclaw/core";
 import { zipSync } from "fflate";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { readSkillFile } from "./agent/skills.js";
 import { collectRun, createTestContext, type TestContext } from "./testing/harness.js";
 import { startMockProvider, type MockProvider } from "./testing/mockProvider.js";
 
@@ -130,6 +131,16 @@ describe("MCP servers", () => {
     expect(toolNamesSent()).not.toContain("mcp__tester__fail");
   });
 
+  it("an image in a result is shown to the owner but not sent to a model without vision", async () => {
+    await addTester({ trust: "allow" });
+    const m = await model("agent-mcp-image");
+    const t = await agentThread(m, true);
+    await collectRun(ctx, (await send(t.id, m.id)).runId);
+    expect(JSON.stringify(mock.requests.at(-1)!.body)).not.toContain("data:image/png;base64,");
+    const detail = await ctx.json<{ messages: { role: string; parts: { type: string }[] }[] }>(`/api/threads/${t.id}`);
+    expect(detail.messages.some((x) => x.role === "tool" && x.parts.some((p) => p.type === "image"))).toBe(true);
+  });
+
   it("a trusted server runs every tool without asking; images in results reach a vision model", async () => {
     await addTester({ trust: "allow" });
     const m = await model("agent-mcp-image", { vision: true });
@@ -250,6 +261,33 @@ describe("skills", () => {
     const results = events.filter((e): e is Extract<RunEvent, { type: "tool_result" }> => e.type === "tool_result");
     expect(results.map((r) => r.name)).toEqual(["read_skill", "mcp__tester__echo"]);
     expect(results[1]).toMatchObject({ ok: true, output: "echo: dari skill" });
+  });
+
+  it("a skill's MCP server stays on for the thread's later messages", async () => {
+    await addTester({ enabled: false });
+    await ctx.json("/api/skills", post({ name: "pakai-tester", description: "Pakai server tester.", body: "Panggil echo.", mcp: ["tester"] }));
+    const m = await model("agent-skill-mcp");
+    const t = await agentThread(m, true);
+    await collectRun(ctx, (await send(t.id, m.id)).runId);
+    const echo = await model("echo");
+    const before = mock.requests.length;
+    await collectRun(ctx, (await send(t.id, echo.id, "lanjut")).runId);
+    expect(JSON.stringify(mock.requests[before]!.body)).toContain("mcp__tester__echo");
+    const other = await agentThread(echo, true);
+    const start = mock.requests.length;
+    await collectRun(ctx, (await send(other.id, echo.id, "halo")).runId);
+    expect(JSON.stringify(mock.requests[start]!.body)).not.toContain("mcp__tester__echo");
+  });
+
+  it("read_skill reads a helper file and stays inside the skill's folder", () => {
+    const dir = join(ctx.tmp, "skill-berkas");
+    mkdirSync(join(dir, "references"), { recursive: true });
+    writeFileSync(join(dir, "references", "catatan.md"), "isi catatan");
+    writeFileSync(join(ctx.tmp, "rahasia.txt"), "rahasia");
+    const skill = { id: "x", name: "skill-berkas", description: "", dir, file: join(dir, "SKILL.md"), source: "EZClaw", mcp: [] };
+    expect(readSkillFile(skill, "references/catatan.md")).toBe("isi catatan");
+    expect(() => readSkillFile(skill, "../rahasia.txt")).toThrow("di luar folder");
+    expect(() => readSkillFile(skill, "tidak-ada.md")).toThrow("tidak punya file");
   });
 
   it("/skill-name sends the skill with the request and starts its MCP server", async () => {

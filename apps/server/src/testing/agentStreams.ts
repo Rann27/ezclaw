@@ -41,7 +41,7 @@ export async function agentChat(res: ServerResponse, body: Json): Promise<void> 
     send(chunk({ tool_calls: [{ index, function: { arguments: args.slice(Math.ceil(args.length / 2)) } }] }));
   });
   send(chunk({}, calls.length ? "tool_calls" : "stop"));
-  send({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 20 } });
+  send({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 20, ...(model.includes("costly") ? { cost: 0.3 } : {}) } });
   res.write("data: [DONE]\n\n");
   res.end();
 }

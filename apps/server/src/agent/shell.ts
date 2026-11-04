@@ -134,10 +134,12 @@ export function cleanEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-export function spawnArgs(shell: ShellKind, command: string): { file: string; args: string[] } {
+export function spawnArgs(shell: ShellKind, command: string, cwd: string): { file: string; args: string[] } {
   if (shell === "powershell") {
+    // Windows PowerShell 5.1 reads a start folder with [ ] as a wildcard, fails to enter it and silently
+    // starts in $PSHOME (System32), so the folder is entered again literally.
     // PowerShell reports 1 for any failed native command; this passes the real exit code through.
-    const script = `$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${command}
+    const script = `$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Set-Location -LiteralPath '${cwd.replace(/'/g, "''")}'; ${command}
 $ezOk = $?; if (-not $ezOk) { if ($LASTEXITCODE) { exit $LASTEXITCODE } else { exit 1 } }`;
     const encoded = Buffer.from(script, "utf16le").toString("base64");
     return { file: "powershell.exe", args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded] };
@@ -163,7 +165,7 @@ export function killTree(pid: number | undefined) {
 export function runShell(opts: { command: string; cwd: string; shell: ShellKind; timeoutMs: number; signal: AbortSignal }): Promise<ShellRun> {
   return new Promise((resolve) => {
     const started = Date.now();
-    const { file, args } = spawnArgs(opts.shell, opts.command);
+    const { file, args } = spawnArgs(opts.shell, opts.command, opts.cwd);
     const child = spawn(file, args, {
       cwd: opts.cwd,
       env: cleanEnv(),

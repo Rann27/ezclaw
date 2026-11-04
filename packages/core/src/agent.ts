@@ -59,7 +59,7 @@ export type ApprovalDecisionInput = z.infer<typeof approvalDecisionSchema>;
 
 export const askAnswerSchema = z.object({ answer: z.string().trim().min(1, "Jawaban kosong.").max(20000) });
 
-export type RunStopReason = "max_steps" | "blocked";
+export type RunStopReason = "max_steps" | "max_cost" | "blocked";
 
 /** Events a client sees on a run's SSE stream. */
 export type RunEvent =
@@ -107,6 +107,11 @@ export interface AgentLoopConfig {
    */
   compactAtTokens: number | null;
   shellTimeoutMs: number;
+  /**
+   * Stop a run once the cost the provider reports for it reaches this many USD. Null: off. Providers
+   * that report no cost are not held by it.
+   */
+  maxCostUsd: number | null;
 }
 
 export const DEFAULT_LOOP: AgentLoopConfig = {
@@ -116,6 +121,7 @@ export const DEFAULT_LOOP: AgentLoopConfig = {
   compactAt: 0.8,
   compactAtTokens: 150_000,
   shellTimeoutMs: 120_000,
+  maxCostUsd: null,
 };
 
 /** Per-thread harness choice. `tools` is used only while the harness is off. */
@@ -138,6 +144,7 @@ const loopSchema = z.object({
   compactAt: z.number().min(0.3).max(0.95),
   compactAtTokens: z.number().int().min(10_000).max(2_000_000).nullable().default(150_000),
   shellTimeoutMs: z.number().int().min(1000).max(600_000),
+  maxCostUsd: z.number().min(0.01).max(1000).nullable().default(null),
 });
 
 /**

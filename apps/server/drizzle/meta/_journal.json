@@ -57,6 +57,13 @@
       "when": 1793033705660,
       "tag": "0007_thread_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793345428544,
+      "tag": "0008_endpoint_rate_limit",
+      "breakpoints": true
     }
   ]
 }

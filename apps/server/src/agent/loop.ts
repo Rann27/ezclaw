@@ -98,8 +98,8 @@ const MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES_IN_CONTEXT = 4;
 
 /** Fills in the bytes of the last few images in the history and drops older ones. */
-export function withImageData(history: CanonicalMessage[], assets: AssetService): CanonicalMessage[] {
-  let budget = MAX_IMAGES_IN_CONTEXT;
+export function withImageData(history: CanonicalMessage[], assets: AssetService, modelSeesImages = true): CanonicalMessage[] {
+  let budget = modelSeesImages ? MAX_IMAGES_IN_CONTEXT : 0;
   const out = [...history];
   for (let i = out.length - 1; i >= 0; i--) {
     const m = out[i]!;
@@ -180,10 +180,17 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
   /* ---- MCP servers: on for this mode, plus the ones a skill in use asks for */
   const mcpWanted = new Set<string>();
   const useSkill = (s: Skill) => s.mcp.forEach((m) => mcpWanted.add(m.toLowerCase()));
-  const lastUser = loadHistoryEntries(db, input.threadId)
-    .map((e) => e.message)
-    .filter((m) => m.role === "user")
-    .at(-1);
+  const past = loadHistoryEntries(db, input.threadId).map((e) => e.message);
+  // A skill read earlier in this thread keeps its servers on, so the next message needs no second read.
+  for (const m of past) {
+    for (const p of m.parts) {
+      if (p.type !== "tool_call" || p.name !== "read_skill") continue;
+      const name = (p.args as { name?: unknown } | null)?.name;
+      const earlier = skillsUsable.find((s) => typeof name === "string" && s.name.toLowerCase() === name.toLowerCase());
+      if (earlier) useSkill(earlier);
+    }
+  }
+  const lastUser = past.filter((m) => m.role === "user").at(-1);
   const lastUserText = lastUser?.parts.map((p) => (p.type === "text" ? p.text : "")).join("") ?? "";
   const invoked = slashSkill(lastUserText, skillsUsable);
   if (invoked) useSkill(invoked);
@@ -265,10 +272,10 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
     useSkill,
     modelSeesImages: modelProfile.inputModalities.includes("image"),
     attachImageData: (bytes, display) => {
-      if (!modelProfile.inputModalities.includes("image")) return false;
+      // The owner sees it in the timeline either way; only the request depends on the model.
       const asset = deps.assets.save(bytes, "upload");
       pendingImages.push({ assetId: asset.id, display });
-      return true;
+      return modelProfile.inputModalities.includes("image");
     },
     attachImage: (abs, display) => {
       const asset = deps.assets.save(readFileSync(abs), "upload");
@@ -305,6 +312,9 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
 
   let lastUsage: Usage | null = null;
   let sinceLastCall = 0;
+  /** What the provider reported this run cost so far; null until a step reports a cost. */
+  let spentUsd: number | null = null;
+  let explainedNoCost = false;
   let finishReason: string | undefined;
 
   /** Adds the messages the owner sent while the run worked. True when there were any. */
@@ -326,6 +336,12 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
       insertMessage(db, { threadId: input.threadId, role: "assistant", parts: [{ type: "text", text }], status: "complete" });
       run.emit({ type: "note", text });
       return { status: "complete", stopReason: "max_steps", finishReason };
+    }
+    if (loop.maxCostUsd !== null && spentUsd !== null && spentUsd >= loop.maxCostUsd) {
+      const text = `Berhenti karena biaya run ini sudah $${spentUsd.toFixed(2)}, mencapai batas $${loop.maxCostUsd.toFixed(2)}. Kirim pesan lagi jika pekerjaan perlu dilanjutkan.`;
+      insertMessage(db, { threadId: input.threadId, role: "assistant", parts: [{ type: "text", text }], status: "complete" });
+      run.emit({ type: "note", text });
+      return { status: "complete", stopReason: "max_cost", finishReason };
     }
 
     const placeholder = insertMessage(db, { threadId: input.threadId, role: "assistant", parts: [{ type: "text", text: "" }], status: "streaming", modelLabel: `${model.endpoint.name} / ${model.row.modelId}` });
@@ -360,7 +376,7 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
     }
 
     /* ---- ask the model */
-    const history = withHarnessMessages(withImageData(entries.map((e) => e.message), deps.assets), extraMessages, userTag);
+    const history = withHarnessMessages(withImageData(entries.map((e) => e.message), deps.assets, modelProfile.inputModalities.includes("image")), extraMessages, userTag);
     const acc = newAccumulator();
     let failure: unknown = null;
     try {
@@ -406,6 +422,11 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
     if (Object.keys(acc.usage).length) {
       lastUsage = acc.usage;
       sinceLastCall = 0;
+      if (acc.usage.costUsd !== undefined) spentUsd = (spentUsd ?? 0) + acc.usage.costUsd;
+      else if (loop.maxCostUsd !== null && spentUsd === null && !explainedNoCost) {
+        explainedNoCost = true;
+        run.emit({ type: "note", text: `${model.endpoint.name} tidak melaporkan biaya, jadi batas biaya $${loop.maxCostUsd.toFixed(2)} per run tidak bisa dijaga di run ini.` });
+      }
     }
     finishReason = acc.finish ?? finishReason;
 

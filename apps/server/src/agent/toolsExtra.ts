@@ -4,7 +4,7 @@ import type { ApprovalRequest } from "@ezclaw/core";
 import { z } from "zod";
 import type { ProcessManager } from "./processes.js";
 import { dangerReason, defaultRulePattern, parseCommand } from "./shell.js";
-import { readSkill, type Skill } from "./skills.js";
+import { readSkill, readSkillFile, type Skill } from "./skills.js";
 import { define, globToRegex, ToolArgError, type ToolEnv, type ToolImpl } from "./tools.js";
 import type { SearchResult } from "./web.js";
 
@@ -15,7 +15,7 @@ export interface ToolExtras {
   skills: Skill[];
   /** Saves an image file as an asset and shows it to the model with its next request. */
   attachImage(abs: string, display: string): { width: number | null; height: number | null };
-  /** Same for image bytes a tool received (an MCP result). Returns false when the model cannot see images. */
+  /** Same for image bytes a tool received (an MCP result); the owner always sees it. Returns false when the model cannot. */
   attachImageData?(bytes: Buffer, display: string): boolean;
   /** False when the model's profile does not accept image input. */
   modelSeesImages: boolean;
@@ -252,8 +252,8 @@ export const spawnAgentTool = define(
 
 export const readSkillTool = define(
   "read_skill",
-  "Read the instructions of a skill listed in the system prompt, before doing a task it covers.",
-  z.object({ name: z.string().min(1) }),
+  "Read the instructions of a skill listed in the system prompt, before doing a task it covers. Pass `file` to read one of the helper files the skill lists.",
+  z.object({ name: z.string().min(1), file: z.string().min(1).optional() }),
   true,
   (args, env) => ({
     need: null,
@@ -262,6 +262,13 @@ export const readSkillTool = define(
       const skill = x.skills.find((s) => s.name.toLowerCase() === args.name.toLowerCase());
       if (!skill) return { output: `Skill "${args.name}" tidak ada. Yang tersedia: ${x.skills.map((s) => s.name).join(", ") || "(tidak ada)"}.`, isError: true };
       x.useSkill?.(skill);
+      if (args.file) {
+        try {
+          return { output: readSkillFile(skill, args.file) };
+        } catch (err) {
+          return { output: err instanceof Error ? err.message : String(err), isError: true };
+        }
+      }
       const mcpNote = skill.mcp.length ? `\n\n---\nTools dari MCP server ${skill.mcp.join(", ")} tersedia mulai langkah berikutnya (nama berawalan mcp__).` : "";
       return { output: readSkill(skill) + mcpNote };
     },

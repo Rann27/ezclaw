@@ -50,6 +50,7 @@ export function EndpointDialog({ open, onClose, editing, onCreated }: Props) {
   const [family, setFamily] = useState("");
   const [headersText, setHeadersText] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [rpm, setRpm] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const presets = catalog.data?.presets ?? [];
@@ -87,9 +88,11 @@ export function EndpointDialog({ open, onClose, editing, onCreated }: Props) {
       setHeaderName(editing.auth.headerName ?? "");
       setFamily(editing.family ?? "");
       setHeadersText(headersToText(editing.extraHeaders));
+      setRpm(editing.rateLimitRpm ? String(editing.rateLimitRpm) : "");
     } else {
       applyPreset(undefined, CUSTOM);
       setHeadersText("");
+      setRpm("");
     }
     // Reset only when the dialog opens for a (different) endpoint.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,13 +103,15 @@ export function EndpointDialog({ open, onClose, editing, onCreated }: Props) {
       const { headers, error: headerError } = parseHeaders(headersText);
       if (headerError) throw new Error(headerError);
       const auth = authType === "header" ? { type: authType, headerName: headerName.trim() } : { type: authType };
+      const rpmValue = rpm.trim() ? Number(rpm) : null;
+      if (rpmValue !== null && (!Number.isInteger(rpmValue) || rpmValue < 1 || rpmValue > 10_000)) throw new Error("Batas request harus angka bulat 1 sampai 10000, atau dikosongkan.");
       if (editing) {
         return api<EndpointDto>(`/endpoints/${editing.id}`, {
           method: "PATCH",
-          body: JSON.stringify({ name, baseUrl, auth, extraHeaders: headers, ...(editing.presetId === CUSTOM ? { family: family || null } : {}) }),
+          body: JSON.stringify({ name, baseUrl, auth, extraHeaders: headers, rateLimitRpm: rpmValue, ...(editing.presetId === CUSTOM ? { family: family || null } : {}) }),
         });
       }
-      const body: EndpointInput = { name, presetId, protocol, baseUrl, auth, extraHeaders: headers, ...(isCustom && family ? { family } : {}), ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) };
+      const body: EndpointInput = { name, presetId, protocol, baseUrl, auth, extraHeaders: headers, ...(rpmValue ? { rateLimitRpm: rpmValue } : {}), ...(isCustom && family ? { family } : {}), ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) };
       return api<EndpointDto>("/endpoints", { method: "POST", body: JSON.stringify(body) });
     },
     onSuccess: (endpoint) => {
@@ -293,6 +298,27 @@ export function EndpointDialog({ open, onClose, editing, onCreated }: Props) {
             <p className="text-meta text-fg-3">Disimpan di penyimpanan kredensial komputer ini, bukan di database. Boleh dikosongkan dan diisi nanti.</p>
           </div>
         )}
+
+        <div className="grid gap-1">
+          <label htmlFor={`${formId}-rpm`} className="text-dense font-semibold">
+            Batas request per menit
+          </label>
+          <input
+            id={`${formId}-rpm`}
+            className="input w-32"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={10000}
+            placeholder="Tanpa batas"
+            aria-describedby={`${formId}-rpm-hint`}
+            value={rpm}
+            onChange={(e) => setRpm(e.target.value)}
+          />
+          <p id={`${formId}-rpm-hint`} className="text-meta text-fg-3">
+            Isi kalau provider membatasi jumlah request, misalnya 10 untuk plan gratis. EZClaw menahan request agar tidak melewatinya. Balasan 429 tetap dicoba ulang otomatis, dengan atau tanpa batas ini.
+          </p>
+        </div>
 
         <details open={headersText.length > 0}>
           <summary className="cursor-pointer text-dense font-semibold">Header tambahan</summary>

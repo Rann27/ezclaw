@@ -16,7 +16,7 @@ export function resultText(res: McpCallResult, env: ToolEnv, label: string): str
     else if (c.type === "image" && c.data) {
       const shown = env.ext?.attachImageData?.(Buffer.from(c.data, "base64"), `${label} gambar ${images + 1}`);
       images++;
-      out.push(shown ? `[gambar ${images} terlampir untuk dilihat]` : `[gambar ${images}: ${c.mimeType ?? "image"}, tidak bisa ditampilkan ke model ini]`);
+      out.push(shown ? `[gambar ${images} terlampir untuk dilihat]` : `[gambar ${images}: ${c.mimeType ?? "image"}, tampil untuk pemilik; model ini tidak bisa melihat gambar]`);
     } else if (c.type === "resource" && c.resource) {
       out.push(c.resource.text ?? `[resource ${c.resource.uri ?? ""} ${c.resource.mimeType ?? ""}]`);
     } else if (c.type === "resource_link") out.push(`[tautan resource] ${JSON.stringify(c).slice(0, 500)}`);

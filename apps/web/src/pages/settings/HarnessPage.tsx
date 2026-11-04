@@ -616,6 +616,28 @@ function ProfileEditor({
                 </p>
               </div>
               <div className="grid gap-2 rounded-sm border border-line p-3">
+                <h3 className="text-dense font-semibold">Batas biaya per run</h3>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={form.loop.maxCostUsd !== null}
+                  disabled={readOnly}
+                  className="switch justify-self-start"
+                  onClick={() => setLoop("maxCostUsd", form.loop.maxCostUsd === null ? 1 : null)}
+                >
+                  <span className="switch-track" aria-hidden />
+                  {form.loop.maxCostUsd !== null ? "Batas biaya: ON" : "Batas biaya: OFF"}
+                </button>
+                {form.loop.maxCostUsd !== null && (
+                  <NumberInput id={`${formId}-cost`} label="Berhenti saat biaya run mencapai (USD)" value={form.loop.maxCostUsd} min={0.01} max={1000} step={0.01} disabled={readOnly} onChange={(v) => setLoop("maxCostUsd", v)} />
+                )}
+                <p className="text-dense text-fg-3">
+                  {form.loop.maxCostUsd !== null
+                    ? `Run berhenti sebelum langkah berikutnya begitu biaya yang dilaporkan provider mencapai $${form.loop.maxCostUsd}. Hanya berlaku untuk provider yang melaporkan biaya per request, seperti Experiential Labs dan OpenRouter.`
+                    : "Tanpa batas biaya. Berguna sebagai pengaman untuk run panjang yang ditinggal, terutama dengan model yang cache-nya mahal."}
+                </p>
+              </div>
+              <div className="grid gap-2 rounded-sm border border-line p-3">
                 <h3 className="text-dense font-semibold">Padatkan konteks berdasarkan jumlah token</h3>
                 <button
                   type="button"
