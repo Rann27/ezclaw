@@ -133,9 +133,11 @@ export function readSkillFile(skill: Skill, file: string): string {
   const abs = resolve(skill.dir, file);
   const rel = relative(skill.dir, abs);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`"${file}" ada di luar folder skill ${skill.name}.`);
-  if (!existsSync(abs) || !statSync(abs).isFile()) throw new Error(`Skill ${skill.name} tidak punya file "${file}".`);
+  // Asking for SKILL.md by name gets the same answer as no file at all, with the folder and file list.
+  if (abs === resolve(skill.file)) return readSkill(skill);
+  if (!existsSync(abs) || !statSync(abs).isFile()) throw new Error(`Skill ${skill.name} tidak punya file "${file}". Folder skill: ${skill.dir}`);
   if (statSync(abs).size > MAX_SKILL_BYTES) throw new Error(`File "${file}" terlalu besar untuk dibaca.`);
-  return readFileSync(abs, "utf8");
+  return `${readFileSync(abs, "utf8")}\n\n---\n(${abs})`;
 }
 
 /** Every `/name` in a message that names a skill, in order. `and/or` and `/usr/bin` are not such words. */

@@ -284,8 +284,14 @@ describe("skills", () => {
     mkdirSync(join(dir, "references"), { recursive: true });
     writeFileSync(join(dir, "references", "catatan.md"), "isi catatan");
     writeFileSync(join(ctx.tmp, "rahasia.txt"), "rahasia");
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: skill-berkas\ndescription: x\n---\nSalin skrip dari folder skill ini.");
     const skill = { id: "x", name: "skill-berkas", description: "", dir, file: join(dir, "SKILL.md"), source: "EZClaw", mcp: [] };
-    expect(readSkillFile(skill, "references/catatan.md")).toBe("isi catatan");
+    expect(readSkillFile(skill, "references/catatan.md")).toContain("isi catatan");
+    expect(readSkillFile(skill, "references/catatan.md")).toContain(join(dir, "references", "catatan.md"));
+    // SKILL.md by name still says where the skill lives, so its scripts can be copied.
+    const main = readSkillFile(skill, "SKILL.md");
+    expect(main).toContain("Salin skrip dari folder skill ini.");
+    expect(main).toContain(`File lain di folder skill (${dir})`);
     expect(() => readSkillFile(skill, "../rahasia.txt")).toThrow("di luar folder");
     expect(() => readSkillFile(skill, "tidak-ada.md")).toThrow("tidak punya file");
   });
