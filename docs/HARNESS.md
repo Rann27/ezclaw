@@ -135,7 +135,7 @@ Settings, Skills. Skill adalah folder berisi `SKILL.md` dengan front matter `nam
 
 Saat Agent (atau Chat dengan tools) sedang bekerja, kotak pesan tetap aktif. Pesan yang dikirim masuk antrean dan disisipkan ke percakapan setelah langkah yang sedang berjalan selesai (setelah hasil tool, supaya setiap pemanggilan tool tetap punya jawabannya). Kalau model sudah selesai menjawab saat pesan masuk, run berlanjut untuk menjawab pesan itu. Chat biasa tanpa tools tetap menunggu jawaban selesai.
 
-## Lampiran di Chat
+## Lampiran di Chat dan Agent
 
 Klik ikon klip, seret file ke kotak pesan, atau tempel dari clipboard.
 
@@ -143,6 +143,7 @@ Klik ikon klip, seret file ke kotak pesan, atau tempel dari clipboard.
 - **PDF** dibaca teksnya (lebih hemat, bisa dibaca model teks). PDF tanpa lapisan teks (hasil scan) diubah menjadi gambar per halaman, paling banyak 8 halaman, lalu mengikuti aturan gambar.
 - **DOCX** dan file teks/kode dikirim sebagai teks. Lebih dari 150.000 karakter per file dipotong dengan catatan.
 - Teks lampiran ikut tersimpan di pesan, jadi tetap terbaca di giliran berikutnya.
+- Saat run masih berjalan, gambar hanya diterima kalau model yang dipilih menerima gambar; kalau tidak, EZClaw menolaknya supaya gambar tidak terlewat diam-diam.
 
 ## Chat dengan tools
 

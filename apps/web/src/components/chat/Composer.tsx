@@ -30,7 +30,7 @@ interface ComposerProps {
   trailing?: ReactNode;
   /** Skills and MCP prompts offered when a word in the message starts with "/". */
   slash?: SlashItem[];
-  /** Lets the owner attach images and documents (Chat). */
+  /** Lets the owner attach images and documents. */
   attachments?: boolean;
   /** The run reads new messages while it works (Agent, Chat with tools): sending stays open. */
   midRun?: boolean;

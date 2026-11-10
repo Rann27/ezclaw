@@ -38,6 +38,7 @@ import { and, count, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { endpoints, models, settings } from "../db/schema.js";
 import { HttpError } from "../errors.js";
+import { ChatGptAuth } from "../provider/chatgptAuth.js";
 import { buildHeaders, joinUrl, keyLast4, networkError, parseProviderError, ProviderError, type ConnectionInfo } from "../provider/http.js";
 import type { SecretStore } from "../secrets.js";
 import { getSettings, updateSettings } from "../settings.js";
@@ -63,11 +64,16 @@ export interface ResolvedModel {
 }
 
 export class RegistryService {
+  /** Sign in with ChatGPT, for endpoints paid from the owner's ChatGPT plan. */
+  readonly chatgpt: ChatGptAuth;
+
   constructor(
     private readonly db: Db,
     private readonly secrets: SecretStore,
     private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+  ) {
+    this.chatgpt = new ChatGptAuth(secrets, fetchImpl);
+  }
 
   /* ---------------------------------------------------------------- catalog */
 
@@ -85,6 +91,7 @@ export class RegistryService {
         needsKey: p.needsKey,
         docsUrl: p.docsUrl ?? null,
         notes: p.notes ?? [],
+        login: p.login ?? null,
       })),
       families: selectableFamilies(),
     };
@@ -113,8 +120,10 @@ export class RegistryService {
       extraHeaders: row.extraHeaders,
       rateLimitRpm: row.rateLimitRpm ?? null,
       needsKey: needsKey && row.authType !== "none",
-      hasKey: row.keyLast4 !== null,
+      hasKey: preset?.login === "chatgpt" ? this.chatgpt.hasSession(row.id) : row.keyLast4 !== null,
       keyLast4: row.keyLast4,
+      login: preset?.login ?? null,
+      signedInAs: preset?.login === "chatgpt" ? this.chatgpt.signedInAs(row.id) : null,
       modelCount,
       lastTest:
         row.lastTestAt && row.lastTestOk !== null
@@ -209,6 +218,7 @@ export class RegistryService {
     this.endpointRow(id);
     this.db.delete(endpoints).where(eq(endpoints.id, id)).run();
     this.secrets.delete(secretId(id));
+    this.chatgpt.forget(id);
     this.pruneDefaultModels();
   }
 
@@ -233,6 +243,19 @@ export class RegistryService {
 
   getApiKey(endpointId: string): string | null {
     return this.secrets.get(secretId(endpointId));
+  }
+
+  /** True when requests to this endpoint can carry a credential: a key, or a ChatGPT sign-in. */
+  hasCredential(row: Pick<EndpointRow, "id" | "presetId" | "authType">): boolean {
+    if (row.authType === "none") return true;
+    return getEndpointPreset(row.presetId)?.login === "chatgpt" ? this.chatgpt.hasSession(row.id) : !!this.getApiKey(row.id);
+  }
+
+  /** The bearer value for a request: the stored key, or a fresh ChatGPT access token. `force` refreshes it now. */
+  async credentialFor(row: Pick<EndpointRow, "id" | "presetId" | "authType">, force = false): Promise<string | null> {
+    if (row.authType === "none") return null;
+    if (getEndpointPreset(row.presetId)?.login === "chatgpt") return this.chatgpt.accessToken(row.id, force);
+    return this.getApiKey(row.id);
   }
 
   connectionFor(row: EndpointRow): ConnectionInfo {
@@ -285,9 +308,8 @@ export class RegistryService {
       this.db.update(endpoints).set({ lastTestAt: new Date(), lastTestOk: ok, lastTestMessage: message }).where(eq(endpoints.id, id)).run();
 
     const needsKey = row.authType !== "none";
-    const key = needsKey ? this.getApiKey(id) : null;
-    if (needsKey && !key) {
-      const message = "Key belum diisi. Masukkan key lalu coba lagi.";
+    if (needsKey && !this.hasCredential(row)) {
+      const message = preset?.login === "chatgpt" ? "Belum masuk dengan akun ChatGPT. Tekan Masuk dengan ChatGPT." : "Key belum diisi. Masukkan key lalu coba lagi.";
       record(false, message);
       return { ok: false, message, modelCount: this.modelCount(id), usedSuggestions: false };
     }
@@ -299,6 +321,7 @@ export class RegistryService {
     let status: number | undefined;
 
     try {
+      const key = await this.credentialFor(row);
       const res = await this.fetchImpl(url, {
         method: "GET",
         headers: buildHeaders(conn, key, "application/json"),

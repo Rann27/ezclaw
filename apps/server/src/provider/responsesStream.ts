@@ -1,5 +1,5 @@
 import type { FinishReason, StreamEvent, Usage } from "@ezclaw/core";
-import { ProviderError } from "./http.js";
+import { planErrorMessage, ProviderError } from "./http.js";
 import { readSse } from "./sse.js";
 
 type Json = Record<string, unknown>;
@@ -96,7 +96,9 @@ export async function* parseResponsesStream(body: ReadableStream<Uint8Array>): A
       }
       case "response.failed": {
         const msg = failureMessage(rec(ev.response), "Provider melaporkan request gagal.");
-        throw new ProviderError(msg, { raw: msg, code: str(rec(rec(ev.response)?.error)?.code) ?? null });
+        const code = str(rec(rec(ev.response)?.error)?.code) ?? null;
+        // A ChatGPT plan can run out mid-answer; that arrives here rather than as an HTTP status.
+        throw new ProviderError(planErrorMessage(code) ?? msg, { raw: msg, code });
       }
       case "error": {
         const err = rec(ev.error) ?? ev;

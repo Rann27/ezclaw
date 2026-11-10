@@ -272,6 +272,38 @@
           "Blok <think>...</think> di dalam jawaban dipisahkan sebagai reasoning secara otomatis."
         ]
       }
+    },
+    {
+      "endpoint": "chatgpt",
+      "model": ".*",
+      "patch": {
+        "tools": true,
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "outputModalities": [
+          "text"
+        ],
+        "reasoning": {
+          "style": "openai-effort",
+          "canDisable": false,
+          "defaultOn": true,
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "defaultEffort": "medium"
+        },
+        "bodyDefaults": {
+          "store": false
+        },
+        "notes": [
+          "Lewat plan ChatGPT: request dikirim dengan store false dan tanpa parameter sampling. Reasoning effort belum terverifikasi di dokumentasi; bila ditolak, EZClaw mengirim ulang tanpanya."
+        ]
+      }
     }
   ]
 }

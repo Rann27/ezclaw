@@ -2,7 +2,7 @@ import type { Protocol } from "@ezclaw/core";
 
 export type EndpointKind = "provider" | "gateway" | "local" | "custom";
 export type AuthType = "bearer" | "header" | "none";
-export type DiscoveryParser = "openrouter" | "venice" | "anthropic" | "openai" | "experiential";
+export type DiscoveryParser = "openrouter" | "venice" | "anthropic" | "openai" | "experiential" | "chatgpt";
 
 export interface AuthSpec {
   type: AuthType;
@@ -27,6 +27,10 @@ export interface EndpointPreset {
   suggestedModels?: { modelId: string; name: string }[];
   docsUrl?: string;
   notes?: string[];
+  /** Signs in with an account instead of taking a key. */
+  login?: "chatgpt";
+  /** Body fields the provider refuses outright; never sent, whatever the params say. */
+  forbiddenBody?: string[];
 }
 
 const bearer: AuthSpec = { type: "bearer" };
@@ -199,6 +203,24 @@ export const ENDPOINT_PRESETS: EndpointPreset[] = [
       "Key berawalan xpl_, dibuat di platform.experientiallabs.ai bagian Settings, API Keys.",
       "Daftar model mengikuti key-mu; konteks, vision, tools, dan reasoning diambil dari katalog publik mereka.",
       "Generate gambar lewat gateway ini belum didokumentasikan, jadi model gambarnya belum dipakai di Image dan Edit.",
+    ],
+  },
+  {
+    id: "chatgpt",
+    name: "ChatGPT (langganan)",
+    kind: "provider",
+    protocol: "openai-responses",
+    baseUrl: "https://api.openai.com/v1",
+    auth: bearer,
+    needsKey: true,
+    discovery: "chatgpt",
+    docsUrl: "https://developers.openai.com/siwc/token-sharing-open-source",
+    login: "chatgpt",
+    forbiddenBody: ["max_output_tokens", "temperature", "top_p", "truncation", "metadata", "user", "previous_response_id", "background", "prompt_cache_retention", "safety_identifier", "top_logprobs"],
+    notes: [
+      "Masuk dengan akun ChatGPT Plus atau Pro: request dibayar dari batas pemakaian plan-mu (dibagi dengan Codex dan ChatGPT Work), bukan dari API key.",
+      "Fitur pratinjau OpenAI untuk aplikasi lokal pribadi. Temperature, top_p, dan batas token output tidak bisa dipakai.",
+      "Saat batas plan habis, request berhenti dengan pesan; tidak pindah ke tagihan lain.",
     ],
   },
   {

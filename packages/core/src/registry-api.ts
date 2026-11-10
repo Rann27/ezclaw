@@ -86,6 +86,10 @@ export interface EndpointDto {
   needsKey: boolean;
   hasKey: boolean;
   keyLast4: string | null;
+  /** "chatgpt": signs in with a ChatGPT account instead of a key. */
+  login: "chatgpt" | null;
+  /** The signed-in account's email, for a login endpoint. */
+  signedInAs: string | null;
   modelCount: number;
   lastTest: { at: string; ok: boolean; message: string } | null;
 }
@@ -103,6 +107,7 @@ export interface CatalogPresetDto {
   needsKey: boolean;
   docsUrl: string | null;
   notes: string[];
+  login: "chatgpt" | null;
 }
 
 export interface CatalogResponse {

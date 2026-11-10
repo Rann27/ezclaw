@@ -162,7 +162,7 @@ export function AgentPage() {
 
   /* ------------------------------------------------------------------- sending */
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, attachments: string[] = []) => {
       setSendError(null);
       const modelId = chosen?.id;
       if (!modelId) throw new Error("Pilih model dulu.");
@@ -178,7 +178,7 @@ export function AgentPage() {
             // Remembering the folder is a convenience only.
           }
         }
-        const res = await api<SendMessageResponse>(`/threads/${id}/messages`, { method: "POST", body: JSON.stringify({ text, modelId, systemPrompt: draft.systemPrompt, params: draft.params }) });
+        const res = await api<SendMessageResponse>(`/threads/${id}/messages`, { method: "POST", body: JSON.stringify({ text, modelId, systemPrompt: draft.systemPrompt, params: draft.params, ...(attachments.length ? { attachments } : {}) }) });
         try {
           localStorage.setItem(LAST_MODEL_KEY, modelId);
         } catch {
@@ -389,6 +389,7 @@ export function AgentPage() {
         <Composer
           wide
           midRun
+          attachments
           slash={slash}
           model={chosen}
           onPickModel={() => setPickerOpen(true)}

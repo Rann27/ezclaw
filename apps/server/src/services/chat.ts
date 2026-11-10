@@ -254,6 +254,8 @@ export class ChatService {
     const userParts: Part[] = [{ type: "text", text: input.text }, ...extraParts];
     const active = this.runs.activeForThread(threadId);
     if (active) {
+      // A run keeps its model, so one that cannot see images would silently miss this one.
+      if (vision.note) throw new HttpError(409, "run_cannot_see_image", `${this.registry.resolveModel(input.modelId).row.modelId} tidak menerima gambar. Tunggu run ini selesai lalu kirim lagi, atau pilih model yang menerima gambar.`);
       // An agent run takes the message and reads it after its current step; a plain answer cannot.
       const runId = this.runs.enqueue(threadId, [{ type: "text", text: input.text }, ...extraParts]);
       if (runId) return { runId, userMessageId: "", assistantMessageId: null, queued: true };
@@ -265,7 +267,7 @@ export class ChatService {
     if (model.row.kind === "image") {
       throw new HttpError(400, "not_a_chat_model", "Model ini menghasilkan gambar. Pakai mode Image untuk model gambar.");
     }
-    if (model.endpoint.authType !== "none" && !this.registry.getApiKey(model.endpoint.id)) {
+    if (!this.registry.hasCredential(model.endpoint)) {
       throw new HttpError(400, "key_missing", `Endpoint ${model.endpoint.name} belum punya key. Isi di Settings, bagian Endpoint.`);
     }
 

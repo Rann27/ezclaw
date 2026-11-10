@@ -71,6 +71,23 @@ function pickMessage(body: unknown): { message: string | null; param: string | n
   return { message, param, code };
 }
 
+/** What a ChatGPT plan-usage error means for the owner. https://developers.openai.com/siwc/token-sharing-open-source */
+const PLAN_ERRORS: Record<string, string> = {
+  subscription_sharing_usage_limit_exceeded: "Batas pemakaian plan ChatGPT-mu sudah habis untuk saat ini. Lihat sisanya di ChatGPT, Settings, Usage. EZClaw tidak beralih ke tagihan lain.",
+  subscription_sharing_user_not_eligible: "Akun ChatGPT ini tidak bisa memakai plan-nya di aplikasi lain. Fitur ini untuk ChatGPT Plus dan Pro.",
+  subscription_sharing_usage_unavailable: "Pemakaian plan ChatGPT sedang tidak tersedia di sisi OpenAI. Coba lagi beberapa saat lagi.",
+  subscription_sharing_user_unavailable: "Pemakaian plan ChatGPT sedang tidak tersedia di sisi OpenAI. Coba lagi beberapa saat lagi.",
+  subscription_sharing_unsupported_capability: "Plan ChatGPT tidak menerima salah satu bagian request ini.",
+  subscription_sharing_route_not_supported: "Jalur request ini tidak didukung untuk plan ChatGPT.",
+  subscription_sharing_invalid_user: "OpenAI tidak menerima login ChatGPT ini. Masuk lagi di Settings, bagian Endpoint.",
+  chatpass_v2_scope_not_authorized: "Izin login ChatGPT ini tidak mencakup pemakaian plan. Keluar lalu masuk lagi di Settings, bagian Endpoint.",
+  chatpass_v2_invalid_authorization_context: "Izin login ChatGPT ini tidak cocok. Keluar lalu masuk lagi di Settings, bagian Endpoint.",
+};
+
+export function planErrorMessage(code: string | null | undefined): string | null {
+  return (code && PLAN_ERRORS[code]) || null;
+}
+
 /** Parses an error response (OpenAI-style, Anthropic-style, or plain text) into a ProviderError. */
 export function parseProviderError(status: number, text: string, conn: Pick<ConnectionInfo, "name" | "isLocal" | "baseUrl">): ProviderError {
   let parsed: unknown = null;
@@ -82,6 +99,9 @@ export function parseProviderError(status: number, text: string, conn: Pick<Conn
   const { message, param, code } = pickMessage(parsed);
   const raw = (message ?? htmlSummary(text) ?? text).trim().slice(0, 2000);
   const detail = raw ? ` Pesan provider: ${raw}` : "";
+
+  const plan = code ? PLAN_ERRORS[code] : undefined;
+  if (plan) return new ProviderError(`${plan}${detail}`, { status, param, code, raw });
 
   let friendly: string;
   switch (status) {

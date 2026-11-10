@@ -20,6 +20,7 @@ function main() {
   const services = createServices({ db, secrets, assetsDir: join(config.dataDir, "assets") });
   services.chat.recover();
   services.mcp.setCallbackBase(`http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`);
+  services.registry.chatgpt.setCallbackBase(`http://127.0.0.1:${config.port}`);
   void services.mcp.startAll();
   void services.registry
     .refreshStaleDiscovery()

@@ -54,8 +54,10 @@ export class DiscoveryParseError extends Error {}
 /** Turns one provider's model list response into discovered models. Unknown shapes throw. */
 export function parseModelList(parser: DiscoveryParser, json: unknown): DiscoveredModel[] {
   const root = asRecord(json);
-  const data = root ? asArray(root.data) : [];
-  if (!root || !Array.isArray(root.data)) {
+  // ChatGPT plan usage lists models under "models" instead of "data".
+  const list = parser === "chatgpt" ? root?.models : root?.data;
+  const data = asArray(list);
+  if (!root || !Array.isArray(list)) {
     throw new DiscoveryParseError("Respons daftar model tidak berbentuk { data: [...] }.");
   }
   const parse = PARSERS[parser];
@@ -75,7 +77,15 @@ const PARSERS: Record<DiscoveryParser, (item: Json) => DiscoveredModel | null> =
   venice: parseVenice,
   anthropic: parseAnthropic,
   experiential: parseExperiential,
+  chatgpt: parseChatGpt,
 };
+
+/** ChatGPT plan models: only the ones the plan lists for direct use. */
+function parseChatGpt(item: Json): DiscoveredModel | null {
+  const slug = asString(item.slug);
+  if (!slug || item.visibility !== "list") return null;
+  return { modelId: slug, name: asString(item.display_name) ?? slug, kind: "text", patch: {}, meta: {} };
+}
 
 function parseOpenAI(item: Json): DiscoveredModel | null {
   const raw = asString(item.id);

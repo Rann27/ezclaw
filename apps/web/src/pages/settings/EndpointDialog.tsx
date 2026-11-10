@@ -289,7 +289,11 @@ export function EndpointDialog({ open, onClose, editing, onCreated }: Props) {
           </div>
         )}
 
-        {!editing && authType !== "none" && (
+        {!editing && preset?.login === "chatgpt" && (
+          <p className="rounded-sm bg-sunken px-3 py-2 text-dense text-fg-2">Tidak perlu API key. Setelah endpoint ditambahkan, tekan Masuk dengan ChatGPT di kartunya.</p>
+        )}
+
+        {!editing && authType !== "none" && !preset?.login && (
           <div className="grid gap-1">
             <label htmlFor={`${formId}-key`} className="text-dense font-semibold">
               API key

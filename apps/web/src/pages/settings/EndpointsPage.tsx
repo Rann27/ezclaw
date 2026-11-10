@@ -1,7 +1,7 @@
 import { PROTOCOL_LABELS, type EndpointDto, type EndpointTestResponse } from "@ezclaw/core";
 import { KeyIcon, PlusIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { api } from "../../api";
 import { Dialog } from "../../components/Dialog";
 import { useEndpoints, useInvalidateRegistry } from "../../lib/queries";
@@ -129,6 +129,39 @@ function EndpointCard({
     },
   });
   const clearKey = useMutation({ mutationFn: () => api(`/endpoints/${ep.id}/key`, { method: "DELETE" }), onSuccess: invalidate });
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [waitingLogin, setWaitingLogin] = useState(false);
+  const signOut = useMutation({ mutationFn: () => api(`/endpoints/${ep.id}/chatgpt/logout`, { method: "POST", body: "{}" }), onSuccess: invalidate });
+
+  async function signIn() {
+    setLoginError(null);
+    // Opened before the request so the browser treats it as the click's own window, not a popup.
+    const tab = window.open("", "_blank");
+    try {
+      const { url } = await api<{ url: string }>(`/endpoints/${ep.id}/chatgpt/login`, { method: "POST", body: "{}" });
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+      setWaitingLogin(true);
+    } catch (err) {
+      tab?.close();
+      setLoginError(err instanceof Error ? err.message : "Login gagal dimulai.");
+    }
+  }
+
+  // The sign-in finishes in the other tab; this card catches up once it does.
+  useEffect(() => {
+    if (!waitingLogin) return;
+    if (ep.signedInAs) {
+      setWaitingLogin(false);
+      return;
+    }
+    const timer = window.setInterval(invalidate, 2500);
+    const stop = window.setTimeout(() => setWaitingLogin(false), 5 * 60_000);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(stop);
+    };
+  }, [waitingLogin, ep.signedInAs, invalidate]);
 
   const status = testResult
     ? { ok: testResult.ok, message: testResult.message, at: testResult.at, fresh: true }
@@ -151,7 +184,19 @@ function EndpointCard({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-dense">
-          {ep.auth.type === "none" ? (
+          {ep.login === "chatgpt" ? (
+            ep.signedInAs ? (
+              <span className="flex items-center gap-1.5">
+                <span className="node node-done" aria-hidden />
+                Masuk sebagai {ep.signedInAs}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-ember-text">
+                <span className="node node-wait" aria-hidden />
+                Belum masuk
+              </span>
+            )
+          ) : ep.auth.type === "none" ? (
             <span className="text-fg-3">Tanpa key</span>
           ) : ep.hasKey ? (
             <span className="flex items-center gap-1.5">
@@ -180,6 +225,17 @@ function EndpointCard({
           </span>
         </p>
       )}
+      {waitingLogin && (
+        <p className="flex items-center gap-2 text-dense text-fg-2" role="status">
+          <span className="node node-run" aria-hidden />
+          Menunggu login di tab ChatGPT. Selesaikan di sana, lalu kembali ke sini.
+        </p>
+      )}
+      {loginError && (
+        <p className="rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text" role="alert">
+          {loginError}
+        </p>
+      )}
       {testing && (
         <p className="flex items-center gap-2 text-dense text-fg-2" role="status">
           <span className="node node-run" aria-hidden />
@@ -191,7 +247,17 @@ function EndpointCard({
         <button type="button" className="btn btn-secondary" onClick={onTest} disabled={testing}>
           Tes koneksi
         </button>
-        {ep.auth.type !== "none" && (
+        {ep.login === "chatgpt" && (
+          <button type="button" className="btn btn-primary" onClick={() => void signIn()}>
+            {ep.signedInAs ? "Masuk ulang" : "Masuk dengan ChatGPT"}
+          </button>
+        )}
+        {ep.login === "chatgpt" && ep.signedInAs && (
+          <button type="button" className="btn btn-ghost" onClick={() => signOut.mutate()} disabled={signOut.isPending}>
+            Keluar
+          </button>
+        )}
+        {ep.auth.type !== "none" && !ep.login && (
           <button type="button" className="btn btn-secondary" onClick={() => setKeyOpen(true)} aria-haspopup="dialog">
             {ep.hasKey ? "Ganti key" : "Isi key"}
           </button>
@@ -202,7 +268,7 @@ function EndpointCard({
         <button type="button" className="btn btn-ghost" onClick={onEdit} aria-haspopup="dialog">
           Ubah
         </button>
-        {ep.hasKey && (
+        {ep.hasKey && !ep.login && (
           <button type="button" className="btn btn-ghost" onClick={() => clearKey.mutate()} disabled={clearKey.isPending}>
             Hapus key
           </button>

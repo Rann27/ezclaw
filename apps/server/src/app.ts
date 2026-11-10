@@ -161,6 +161,16 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
   });
   api.delete("/endpoints/:id/key", (c) => c.json(registry.clearKey(c.req.param("id"))));
   api.post("/endpoints/:id/test", async (c) => c.json(await registry.testEndpoint(c.req.param("id"))));
+  api.post("/endpoints/:id/chatgpt/login", (c) => {
+    const ep = registry.getEndpoint(c.req.param("id"));
+    if (ep.login !== "chatgpt") throw new HttpError(400, "not_a_login_endpoint", "Endpoint ini memakai key, bukan login ChatGPT.");
+    return c.json({ url: registry.chatgpt.start(ep.id) });
+  });
+  api.post("/endpoints/:id/chatgpt/logout", async (c) => {
+    const ep = registry.getEndpoint(c.req.param("id"));
+    await registry.chatgpt.signOut(ep.id);
+    return c.json(registry.getEndpoint(ep.id));
+  });
   api.post("/endpoints/:id/models", async (c) => {
     const input = manualModelSchema.parse(await readJson(c.req.raw));
     return c.json(registry.addManualModel(c.req.param("id"), input), 201);
@@ -557,6 +567,23 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
       return page("Login berhasil", `EZClaw sudah tersambung ke ${name}. Tab ini boleh ditutup.`);
     } catch (err) {
       return page("Login MCP gagal", err instanceof Error ? err.message : String(err));
+    }
+  });
+  // Same for Sign in with ChatGPT: only a sign-in this EZClaw started (matched by state) is finished.
+  app.get("/chatgpt/oauth/callback", async (c) => {
+    const page = (title: string, text: string) =>
+      c.html(`<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.6"><h1 style="font-size:1.25rem">${esc(title)}</h1><p>${esc(text)}</p></body>`);
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    const failed = c.req.query("error_description") ?? c.req.query("error");
+    if (failed) return page("Login ChatGPT dibatalkan", `OpenAI menjawab: ${failed}. Tutup tab ini dan coba lagi dari EZClaw.`);
+    if (!code || !state) return page("Login ChatGPT tidak lengkap", "Alamat ini tidak membawa kode login. Tutup tab ini dan mulai lagi dari Settings, bagian Endpoint.");
+    try {
+      const done = await registry.chatgpt.finish(state, code, c.req.query("client_id") ?? null);
+      const test = await registry.testEndpoint(done.endpointId);
+      return page("Login ChatGPT berhasil", `EZClaw tersambung${done.email ? ` sebagai ${done.email}` : ""}. ${test.message} Tab ini boleh ditutup.`);
+    } catch (err) {
+      return page("Login ChatGPT gagal", err instanceof Error ? err.message : String(err));
     }
   });
   app.get("*", webHandler({ distDir: config.webDistDir, sessionToken: config.sessionToken }));

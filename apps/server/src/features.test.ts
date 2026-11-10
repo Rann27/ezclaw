@@ -222,6 +222,41 @@ describe("messages during a run", () => {
     expect(last.parts.find((p) => p.type === "text")).toMatchObject({ text: "Diterima: ini pesan tambahan" });
   });
 
+  it("Agent reads attachments: documents as text, images as images", async () => {
+    const m = await model("echo", { tools: true, inputModalities: ["text", "image"] });
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "agent", workspace: ws, modelId: m.id }));
+    const txt = await attach(Buffer.from("isi catatan rapat"), "catatan.md");
+    const img = await attach(makePng(3), "foto.png");
+    const res = await ctx.json<SendMessageResponse>(`/api/threads/${t.id}/messages`, post({ text: "lihat ini", modelId: m.id, attachments: [txt.id, img.id] }));
+    await collectRun(ctx, res.runId);
+    const body = lastChatBody();
+    expect(body).toContain("isi catatan rapat");
+    expect(body).toContain("data:image/png;base64,");
+    const parts = (await ctx.json<ThreadDetailDto>(`/api/threads/${t.id}`)).messages[0]!.parts;
+    expect(parts.map((p) => p.type).sort()).toEqual(["file", "image", "text"]);
+  });
+
+  it("an image sent during a run is refused when the model cannot see it, and joins when it can", async () => {
+    const blind = await model("agent-midrun", { tools: true });
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "agent", workspace: ws, modelId: blind.id }));
+    const first = await ctx.json<SendMessageResponse>(`/api/threads/${t.id}/messages`, post({ text: "mulai", modelId: blind.id }));
+    const started = Date.now();
+    let approval: Extract<RunEvent, { type: "approval" }> | undefined;
+    while (!approval && Date.now() - started < 10_000) {
+      approval = ctx.services.runs.snapshot(first.runId, 0)?.events.find((e): e is Extract<RunEvent, { type: "approval" }> => e.type === "approval");
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    const seer = await model("seer", { inputModalities: ["text", "image"] });
+    const img = await attach(makePng(3), "foto.png");
+    const refused = await ctx.req(`/api/threads/${t.id}/messages`, post({ text: "lihat", modelId: blind.id, attachments: [img.id] }));
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toContain("tidak menerima gambar");
+    const queued = await ctx.json<SendMessageResponse>(`/api/threads/${t.id}/messages`, post({ text: "gambar tambahan", modelId: seer.id, attachments: [img.id] }));
+    expect(queued).toMatchObject({ runId: first.runId, queued: true });
+    await ctx.json(`/api/runs/${first.runId}/approvals/${approval!.approvalId}`, post({ decision: "allow" }));
+    await collectRun(ctx, first.runId);
+  });
+
   it("Chat with Web on searches through the tool loop without asking", async () => {
     process.env.EZCLAW_DDG_URL = `${mock.url}/ddg`;
     try {

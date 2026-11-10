@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { requestLogs } from "../db/schema.js";
 import type { RegistryService } from "../services/registry.js";
+import { getEndpointPreset } from "@ezclaw/registry";
 import { getSettings } from "../settings.js";
 import { parseAnthropicStream } from "./anthropicStream.js";
 import { buildHeaders, joinUrl, networkError, parseProviderError, ProviderError, redactHeaders } from "./http.js";
@@ -92,10 +93,12 @@ export async function callModel(deps: ModelCallDeps, args: ModelCallArgs, acc: T
   const { endpoint, resolved } = model;
   acc.modelLabel = `${endpoint.name} / ${model.row.modelId}`;
   const conn = registry.connectionFor(endpoint);
-  const apiKey = endpoint.authType === "none" ? null : registry.getApiKey(endpoint.id);
-  if (endpoint.authType !== "none" && !apiKey) {
+  if (!registry.hasCredential(endpoint)) {
     throw new ProviderError(`Key untuk ${endpoint.name} tidak ditemukan di penyimpanan kredensial. Masukkan ulang di Settings.`);
   }
+  const preset = getEndpointPreset(endpoint.presetId);
+  const forbidden = preset?.forbiddenBody ?? [];
+  let refreshedLogin = false;
 
   const note = (t: string) => {
     if (acc.notes.includes(t)) return;
@@ -137,13 +140,17 @@ export async function callModel(deps: ModelCallDeps, args: ModelCallArgs, acc: T
       system: args.system,
       messages: args.messages,
       tools: args.tools,
-      omit: [...resolved.omit, ...sessionOmit],
+      omit: [...resolved.omit, ...forbidden, ...sessionOmit],
     });
     for (const n of built.notes) note(n);
     // A field this very call just retried without was already explained by the retry note.
-    for (const d of built.dropped) if (!sessionOmit.includes(d.param)) note(`${d.param} tidak dikirim: ${d.reason}`);
+    for (const d of built.dropped) {
+      if (sessionOmit.includes(d.param)) continue;
+      note(forbidden.includes(d.param) ? `${d.param} tidak dikirim: ${endpoint.name} tidak menerima parameter ini.` : `${d.param} tidak dikirim: ${d.reason}`);
+    }
 
     const url = joinUrl(endpoint.baseUrl, built.path);
+    const apiKey = await registry.credentialFor(endpoint);
     const headers = buildHeaders(conn, apiKey, "text/event-stream");
     const bodyText = JSON.stringify(built.body);
     const logId = randomUUID();
@@ -196,6 +203,14 @@ export async function callModel(deps: ModelCallDeps, args: ModelCallArgs, acc: T
         const errText = await res.text().catch(() => "");
         logDone({ status: res.status, responseText: errText.slice(0, MAX_LOGGED_RESPONSE) });
         const perr = parseProviderError(res.status, errText, conn);
+        // An access token OpenAI no longer accepts: refresh it once and send the same request again.
+        if (res.status === 401 && preset?.login === "chatgpt" && !refreshedLogin) {
+          refreshedLogin = true;
+          await registry.credentialFor(endpoint, true);
+          continue;
+        }
+        // A spent ChatGPT plan stops here; waiting a few seconds does not bring it back.
+        if (perr.opts.code === "subscription_sharing_usage_limit_exceeded") throw perr;
         // A rate limit: wait as long as the provider asks (or back off), then send the same request again.
         if (res.status === 429 && !isQuotaError(errText) && rateRetries < RATE_LIMIT_BACKOFF_MS.length) {
           const wait = Math.min(retryAfterMs(res.headers) ?? RATE_LIMIT_BACKOFF_MS[rateRetries]!, MAX_RATE_LIMIT_WAIT_MS);
