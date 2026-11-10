@@ -162,14 +162,14 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
   }
 
   return (
-    <form onSubmit={(e) => void submit(e)} className={`mx-auto w-full ${wide ? "max-w-[72rem]" : "max-w-[calc(var(--read-max)+3rem)]"} px-4 pb-4`} aria-label="Tulis pesan">
+    <form onSubmit={(e) => void submit(e)} className={`composer-wrap mx-auto w-full ${wide ? "max-w-[72rem]" : "max-w-[var(--work-max)]"} px-4`} aria-label="Tulis pesan">
       {error && (
         <p className="mb-2 rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text" role="alert">
           {error}
         </p>
       )}
       <div
-        className={`grid gap-2 rounded-lg border bg-raised p-3 focus-within:border-line-strong ${dragging ? "border-brand-strong" : "border-line"}`}
+        className={`composer-surface grid gap-1.5 ${dragging ? "border-brand-strong" : ""}`}
         onDragOver={
           canAttach
             ? (e) => {
@@ -194,13 +194,13 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
       >
         {menuOpen && <SlashList id={listId} items={matches} active={active} onPick={pick} />}
         <AttachmentTray items={files} onRemove={(key) => setFiles((fs) => fs.filter((f) => f.key !== key))} />
-        <label htmlFor="composer-input" className="sr-only">
-          Pesan
+        <label htmlFor="composer-input" className="composer-label">
+          Pesanmu
         </label>
         <textarea
           id="composer-input"
           ref={area}
-          rows={2}
+          rows={1}
           value={text}
           onChange={(e) => {
             setText(e.target.value);
@@ -227,7 +227,7 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
           aria-activedescendant={menuOpen ? `${listId}-${active}` : undefined}
           className="w-full resize-none border-0 bg-transparent p-1 text-body leading-[1.62] text-fg placeholder:text-fg-3 focus-visible:outline-none"
         />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="composer-toolbar flex flex-wrap items-center gap-2">
           <ModelChip model={model} onClick={onPickModel} disabled={running} />
           {canAttach && (
             <>
@@ -235,7 +235,8 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
                 ref={fileInput}
                 type="file"
                 multiple
-                className="sr-only"
+                hidden
+                aria-label="File lampiran"
                 accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.docx,.txt,.md,.csv,.json,.xml,.html,.yaml,.yml,.srt,.js,.ts,.tsx,.py,.java,.go,.rs,.c,.cpp,.cs,.php,.sql,.css"
                 onChange={(e) => {
                   if (e.target.files) addFiles(e.target.files);
@@ -248,20 +249,6 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
             </>
           )}
           {extra}
-          <span id={hintId} className="text-meta text-fg-3">
-            {blocker ? (
-              <>
-                {blocker}{" "}
-                {model && keyMissing && (
-                  <Link to="/settings/endpoints" className="text-brand-text underline">
-                    Isi key
-                  </Link>
-                )}
-              </>
-            ) : (
-              <>{queueing ? "Pesan dibaca agent setelah langkah ini selesai" : "Ctrl+Enter untuk kirim"}{slash.length ? " · / untuk skill" : ""}</>
-            )}
-          </span>
           {trailing}
           {queueing ? (
             <>
@@ -287,6 +274,11 @@ export function Composer({ model, onPickModel, running, keyMissing, onSend, onSt
           )}
         </div>
       </div>
+      <p id={hintId} className="composer-hint">
+        {blocker ?? (queueing ? "Pesan dibaca setelah langkah ini selesai" : "Ctrl + Enter untuk kirim. Shift + Enter untuk baris baru.")}
+        {slash.length > 0 && !blocker && " / untuk skill."}
+        {model && keyMissing && <> <Link to="/settings/endpoints" className="text-brand-text underline">Isi key</Link></>}
+      </p>
       {promptItem && <PromptArgsDialog item={promptItem} onClose={() => setPromptItem(null)} onSubmit={(args) => insertPrompt(promptItem, args).then(() => setPromptItem(null))} />}
     </form>
   );

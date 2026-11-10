@@ -1,73 +1,51 @@
-/*
-  EZClaw design tokens. Single source for the web app (Tailwind v4 @theme maps to these)
-  and for design/preview.html. Every text pairing listed in DESIGN.md section 3 was checked
-  for WCAG AA with antislop-human/contrast-check.py.
-*/
-
+/* Shared by the application and the component preview. */
 :root {
   color-scheme: light;
-
-  /* Surfaces: warm paper instead of flat white, so long sessions feel less clinical */
-  --bg: #F6F5F0;
-  --surface: #FCFBF8;
+  --bg: #EAF0E7;
+  --surface: #F3F6F0;
   --raised: #FFFFFF;
-  --sunken: #EFEDE6;
-
-  /* Lines: --line is decorative only, --line-strong marks control edges (3:1+) */
-  --line: #E3E0D6;
-  --line-strong: #8C887B;
-
-  /* Text */
-  --text: #1E1F1A;
-  --text-2: #55564C;
-  --text-3: #6A6A5F;
-
-  /* Brand sage. #8EA66B fails as text on light, so it is a fill with dark ink */
+  --sunken: #E9EEE5;
+  --rail-bg: #E4EBDD;
+  --glass: rgb(255 255 255 / 0.86);
+  --glass-edge: rgb(255 255 255 / 0.9);
+  --line: #DAE2D5;
+  --line-strong: #7A8772;
+  --text: #20291E;
+  --text-2: #4F5D48;
+  --text-3: #56634E;
   --brand: #8EA66B;
-  --brand-hover: #7F975D;
+  --brand-hover: #A2B783;
   --brand-ink: #1A2210;
   --brand-strong: #5F7840;
-  --brand-text: #4A5E31;
-  --brand-soft: #E5EBD9;
-  --brand-soft-text: #3B4B26;
-
-  /* Ember: the single accent, reserved for "waiting for you" (approvals, ask_user) */
+  --brand-text: #496030;
+  --brand-soft: #E3ECD8;
+  --brand-soft-text: #344A23;
   --ember: #D98B3A;
-  --ember-ink: #1E1F1A;
-  --ember-text: #8A4510;
+  --ember-ink: #20291E;
+  --ember-text: #81400C;
   --ember-soft: #F8E6CF;
-
-  /* Danger */
   --danger: #A3372A;
   --danger-ink: #FFFFFF;
   --danger-text: #A3372A;
   --danger-soft: #F6E0DB;
-
-  --focus: #4A5E31;
-
-  /* Elevation: only floating layers get a shadow */
-  --shadow-pop: 0 1px 2px rgb(30 31 26 / 0.06), 0 8px 24px rgb(30 31 26 / 0.10);
-  --shadow-dialog: 0 2px 4px rgb(30 31 26 / 0.08), 0 24px 56px rgb(30 31 26 / 0.18);
-  --scrim: rgb(20 21 18 / 0.45);
-
-  /* Type */
+  --focus: #496030;
+  --shadow-pop: 0 2px 4px rgb(32 41 30 / 0.04), 0 12px 32px rgb(32 41 30 / 0.12);
+  --shadow-dialog: 0 8px 24px rgb(32 41 30 / 0.08), 0 32px 80px rgb(32 41 30 / 0.2);
+  --shadow-composer: 0 2px 6px rgb(32 41 30 / 0.03), 0 8px 28px rgb(32 41 30 / 0.06);
+  --scrim: rgb(20 29 18 / 0.48);
   --font-sans: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Atkinson Hyperlegible Mono", "Cascadia Mono", Consolas, monospace;
-
-  --text-xs: 0.75rem;    /* 12 meta, timestamps */
-  --text-sm: 0.8125rem;  /* 13 dense UI, chips */
-  --text-md: 0.875rem;   /* 14 default UI */
-  --text-read: 0.9375rem;/* 15 chat and agent prose */
-  --text-lg: 1.0625rem;  /* 17 panel titles */
-  --text-xl: 1.25rem;    /* 20 page titles */
-  --text-2xl: 1.5rem;    /* 24 empty-state headline */
-  --text-3xl: 1.875rem;  /* 30 rare: onboarding */
-
-  --leading-tight: 1.25;
-  --leading-ui: 1.45;
-  --leading-read: 1.62;
-
-  /* Space: 4px base */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-read: 0.9375rem;
+  --text-lg: 1rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.625rem;
+  --text-3xl: 2rem;
+  --leading-tight: 1.2;
+  --leading-ui: 1.5;
+  --leading-read: 1.6;
   --s-0-5: 2px;
   --s-1: 4px;
   --s-1-5: 6px;
@@ -79,97 +57,93 @@
   --s-8: 32px;
   --s-10: 40px;
   --s-14: 56px;
-
-  /* Radius: small set, used by role */
-  --r-xs: 4px;   /* chips, tags, thread nodes */
-  --r-sm: 6px;   /* buttons, inputs */
-  --r-md: 10px;  /* panels, cards, image tiles */
-  --r-lg: 14px;  /* composer, dialogs */
-  --r-full: 999px; /* switch track only */
-
-  /* Motion */
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --t-fast: 120ms;
-  --t-base: 180ms;
-
-  /* Layout */
-  --rail-w: 248px;
-  --inspector-w: 320px;
-  --read-max: 72ch;
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-full: 999px;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --t-fast: 140ms;
+  --t-base: 220ms;
+  --rail-w: 208px;
+  --inspector-w: 264px;
+  --read-max: 78ch;
+  --work-max: 1120px;
   --tap: 44px;
-  --control-h: 36px;
+  --control-h: 30px;
 }
 
-/* Dark tokens, shared by OS preference and manual override */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #141512;
-    --surface: #1B1C18;
-    --raised: #23241F;
-    --sunken: #10110E;
-    --line: #2C2D27;
-    --line-strong: #6E6F64;
-    --text: #ECEBE4;
-    --text-2: #B4B3A8;
-    --text-3: #8F8E84;
-    --brand: #8EA66B;
+    --bg: #171E16;
+    --surface: #20291E;
+    --raised: #283225;
+    --sunken: #1A2218;
+    --rail-bg: #1C251A;
+    --glass: rgb(40 50 37 / 0.9);
+    --glass-edge: rgb(172 194 153 / 0.13);
+    --line: #35422F;
+    --line-strong: #809375;
+    --text: #EEF3E8;
+    --text-2: #BFCCB5;
+    --text-3: #A3B499;
     --brand-hover: #A3B784;
     --brand-ink: #141A0C;
-    --brand-strong: #8EA66B;
-    --brand-text: #A9BF88;
-    --brand-soft: #252D1B;
-    --brand-soft-text: #BCD09C;
-    --ember: #D98B3A;
-    --ember-ink: #141512;
-    --ember-text: #E8A55E;
+    --brand-strong: #A2BC80;
+    --brand-text: #B4CE93;
+    --brand-soft: #35452A;
+    --brand-soft-text: #D6E8BF;
+    --ember-ink: #141A0C;
+    --ember-text: #EDB16E;
     --ember-soft: #3A2A18;
-    --danger: #EC8A78;
-    --danger-ink: #141512;
-    --danger-text: #EC8A78;
-    --danger-soft: #3A1E19;
-    --focus: #A9BF88;
-    --shadow-pop: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
-    --shadow-dialog: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 56px rgb(0 0 0 / 0.55);
-    --scrim: rgb(0 0 0 / 0.6);
+    --danger: #F2A08F;
+    --danger-ink: #171E16;
+    --danger-text: #F2A08F;
+    --danger-soft: #402820;
+    --focus: #B4CE93;
+    --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.2), 0 16px 40px rgb(0 0 0 / 0.25);
+    --shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.2), 0 32px 80px rgb(0 0 0 / 0.4);
+    --shadow-composer: 0 4px 24px rgb(0 0 0 / 0.18);
+    --scrim: rgb(6 12 5 / 0.7);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #141512;
-  --surface: #1B1C18;
-  --raised: #23241F;
-  --sunken: #10110E;
-  --line: #2C2D27;
-  --line-strong: #6E6F64;
-  --text: #ECEBE4;
-  --text-2: #B4B3A8;
-  --text-3: #8F8E84;
-  --brand: #8EA66B;
+  --bg: #171E16;
+  --surface: #20291E;
+  --raised: #283225;
+  --sunken: #1A2218;
+  --rail-bg: #1C251A;
+  --glass: rgb(40 50 37 / 0.9);
+  --glass-edge: rgb(172 194 153 / 0.13);
+  --line: #35422F;
+  --line-strong: #809375;
+  --text: #EEF3E8;
+  --text-2: #BFCCB5;
+  --text-3: #A3B499;
   --brand-hover: #A3B784;
   --brand-ink: #141A0C;
-  --brand-strong: #8EA66B;
-  --brand-text: #A9BF88;
-  --brand-soft: #252D1B;
-  --brand-soft-text: #BCD09C;
-  --ember: #D98B3A;
-  --ember-ink: #141512;
-  --ember-text: #E8A55E;
+  --brand-strong: #A2BC80;
+  --brand-text: #B4CE93;
+  --brand-soft: #35452A;
+  --brand-soft-text: #D6E8BF;
+  --ember-ink: #141A0C;
+  --ember-text: #EDB16E;
   --ember-soft: #3A2A18;
-  --danger: #EC8A78;
-  --danger-ink: #141512;
-  --danger-text: #EC8A78;
-  --danger-soft: #3A1E19;
-  --focus: #A9BF88;
-  --shadow-pop: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.45);
-  --shadow-dialog: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 56px rgb(0 0 0 / 0.55);
-  --scrim: rgb(0 0 0 / 0.6);
+  --danger: #F2A08F;
+  --danger-ink: #171E16;
+  --danger-text: #F2A08F;
+  --danger-soft: #402820;
+  --focus: #B4CE93;
+  --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.2), 0 16px 40px rgb(0 0 0 / 0.25);
+  --shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.2), 0 32px 80px rgb(0 0 0 / 0.4);
+  --shadow-composer: 0 4px 24px rgb(0 0 0 / 0.18);
+  --scrim: rgb(6 12 5 / 0.7);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root {
-    --t-fast: 0ms;
-    --t-base: 0ms;
-  }
+  :root { --t-fast: 0ms; --t-base: 0ms; }
 }

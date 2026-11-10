@@ -36,7 +36,7 @@ export function UserMessage({ message }: { message: MessageDto }) {
   return (
     <div className="grid justify-items-end gap-2">
       <MessageAttachments message={message} />
-      <div className="max-w-[min(56ch,100%)] whitespace-pre-wrap rounded-md bg-sunken px-4 py-3 text-body break-words">{textOf(message)}</div>
+      <div className="user-message max-w-[min(56ch,100%)] whitespace-pre-wrap px-3 py-2 text-body break-words">{textOf(message)}</div>
     </div>
   );
 }
@@ -80,7 +80,7 @@ export function AssistantMessage({ message, live, onShowRequest, onRetry, canRet
   const usageText = formatUsage(usage);
 
   return (
-    <article className="grid max-w-[var(--read-max)] gap-3" aria-label="Jawaban asisten" aria-busy={streaming}>
+    <article className="assistant-message grid max-w-[var(--read-max)] gap-3" aria-label="Jawaban asisten" aria-busy={streaming}>
       {reasoning && (
         <details open={streaming && !text} className="rounded-sm border border-line">
           <summary className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-dense text-fg-2">

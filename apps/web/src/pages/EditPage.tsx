@@ -19,7 +19,6 @@ import { useImageRun } from "../components/image/useImageRun";
 import { downloadAsset, uploadAsset, ACCEPTED_IMAGE_TYPES } from "../lib/assets";
 import { canEdit, keys, useEndpoints, useModelProfile, useModels, useSettings, useThread } from "../lib/queries";
 import { newImageParams, withSafeModePref } from "../lib/imageDefaults";
-import { useWide } from "../lib/useWide";
 
 const LAST_MODEL_KEY = "ezclaw.lastEditModel";
 
@@ -45,7 +44,6 @@ export function EditPage() {
   const threadId = search.t;
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const wide = useWide();
 
   const thread = useThread(threadId);
   const models = useModels();
@@ -68,7 +66,7 @@ export function EditPage() {
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [logFor, setLogFor] = useState<string | null>(null);
   const [compare, setCompare] = useState<{ a: string; b: string } | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [focusSignal, setFocusSignal] = useState(0);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -227,7 +225,6 @@ export function EditPage() {
   const keyMissing = !!endpoint && endpoint.needsKey && !endpoint.hasKey;
   const noEndpoints = endpoints.isSuccess && endpoints.data.endpoints.length === 0;
   const noImageModels = models.isSuccess && imageModels.length === 0;
-  const inspectorVisible = wide || inspectorOpen;
   const current = versions.find((v) => v.assetId === target) ?? null;
   const currentMessage = current?.messageId ? messages.find((m) => m.id === current.messageId) : undefined;
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
@@ -248,21 +245,21 @@ export function EditPage() {
   );
 
   return (
-    <div className="flex h-full min-h-0">
-      <section className="flex min-w-0 flex-1 flex-col" aria-label="Edit gambar">
+    <div className="workbench flex h-full min-h-0">
+      <section className="workbench-stage flex min-w-0 flex-1 flex-col" aria-label="Kanvas edit gambar">
         <ThreadHeader
           thread={thread.data}
           fallbackTitle="Edit baru"
           renaming={renaming}
           setRenaming={setRenaming}
           onDelete={() => setDeleting(true)}
-          showInspectorToggle={!wide}
+          showInspectorToggle
           inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen((v) => !v)}
         />
 
         <div className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto grid w-full max-w-[calc(var(--read-max)+3rem)] gap-6 px-4 py-6">
+          <div className="mx-auto grid w-full max-w-[var(--work-max)] gap-4 px-4 py-4">
             {threadId && thread.isPending && (
               <p className="flex items-center gap-2 text-ui text-fg-2" role="status">
                 <span className="node node-run" aria-hidden />
@@ -430,15 +427,10 @@ export function EditPage() {
         />
       </section>
 
-      {inspectorVisible && wide && (
-        <aside aria-label="Pengaturan edit" className="hidden w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line bg-surface xl:block">
+      {inspectorOpen && (
+        <aside aria-label="Pengaturan edit" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
           {inspector}
         </aside>
-      )}
-      {!wide && (
-        <Dialog open={inspectorOpen} onClose={() => setInspectorOpen(false)} title="Pengaturan edit" width="max-w-md">
-          {inspector}
-        </Dialog>
       )}
 
       <ModelPickerDialog
@@ -519,9 +511,9 @@ function TargetDrop({ noEndpoints, noImageModels, uploading, onFiles }: { noEndp
           onFiles(files);
         }
       }}
-      className={`grid max-w-xl justify-items-start gap-3 rounded-md border border-dashed p-6 ${over ? "border-brand-strong bg-brand-soft" : "border-line-strong bg-surface"}`}
+      className={`target-drop grid border border-dashed ${over ? "border-brand-strong bg-brand-soft" : "border-line-strong bg-surface"}`}
     >
-      <ImageIcon size={28} className="text-fg-3" aria-hidden />
+      <ImageIcon size={36} weight="duotone" className="text-brand-text" aria-hidden />
       <p className="text-body text-fg-2">
         Pilih gambar yang mau diedit: unggah, seret ke sini, atau tempel dari clipboard. Gambar hasil mode Image juga bisa dibuka di sini lewat tombol &quot;Edit gambar ini&quot;.
       </p>

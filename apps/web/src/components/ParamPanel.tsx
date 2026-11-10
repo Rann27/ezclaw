@@ -41,7 +41,7 @@ export function ParamPanel({ profile, params, onChange, disabled }: ParamPanelPr
   const defaultLabel = r.defaultOn ? "Bawaan (aktif)" : "Bawaan";
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-3">
       {panel.notes.length > 0 && (
         <details className="rounded-sm bg-sunken px-3 py-2 text-dense text-fg-2">
           <summary className="cursor-pointer font-semibold">Catatan model ({panel.notes.length})</summary>
@@ -105,7 +105,7 @@ export function ParamPanel({ profile, params, onChange, disabled }: ParamPanelPr
       )}
 
       {panel.sampling.length > 0 && (
-        <section aria-labelledby="p-sampling" className="grid gap-3">
+        <section aria-labelledby="p-sampling" className="grid gap-2">
           <h3 id="p-sampling" className="text-dense font-semibold">
             Sampling
           </h3>
@@ -115,7 +115,7 @@ export function ParamPanel({ profile, params, onChange, disabled }: ParamPanelPr
         </section>
       )}
 
-      <section aria-labelledby="p-output" className="grid gap-3">
+      <section aria-labelledby="p-output" className="grid gap-2">
         <h3 id="p-output" className="text-dense font-semibold">
           Keluaran
         </h3>
@@ -143,7 +143,7 @@ export function ParamPanel({ profile, params, onChange, disabled }: ParamPanelPr
       </section>
 
       {panel.extras.length > 0 && (
-        <section aria-labelledby="p-extras" className="grid gap-3">
+        <section aria-labelledby="p-extras" className="grid gap-2">
           <h3 id="p-extras" className="text-dense font-semibold">
             Opsi provider
           </h3>

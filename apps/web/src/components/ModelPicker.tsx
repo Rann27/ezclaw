@@ -193,7 +193,7 @@ export function ModelPickerDialog({ open, onClose, selectedId, onSelect, kind = 
     <Dialog open={open} onClose={onClose} title="Pilih model" width="max-w-2xl">
       <div className="grid gap-3">
         <div className="grid gap-2">
-          <label htmlFor="model-search" className="sr-only">
+          <label htmlFor="model-search" className="text-dense font-semibold">
             Cari model
           </label>
           <input

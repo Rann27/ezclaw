@@ -1,19 +1,23 @@
-import { Link, createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
+import { Link, createRootRoute, createRoute, createRouter, lazyRouteComponent, redirect } from "@tanstack/react-router";
 import { Shell } from "./components/Shell";
 import { readLastMode } from "./modes";
-import { AgentPage } from "./pages/AgentPage";
-import { ChatPage } from "./pages/ChatPage";
-import { EditPage } from "./pages/EditPage";
-import { ImagePage } from "./pages/ImagePage";
-import { EndpointsPage } from "./pages/settings/EndpointsPage";
-import { GeneralPage } from "./pages/settings/GeneralPage";
-import { HarnessPage } from "./pages/settings/HarnessPage";
-import { MemoryPage } from "./pages/settings/MemoryPage";
-import { McpPage } from "./pages/settings/McpPage";
-import { SkillsPage } from "./pages/settings/SkillsPage";
-import { ModelsPage } from "./pages/settings/ModelsPage";
-import { LibraryPage } from "./pages/LibraryPage";
-import { SettingsLayout } from "./pages/settings/SettingsLayout";
+const AgentPage = lazyRouteComponent(() => import("./pages/AgentPage"), "AgentPage");
+const ChatPage = lazyRouteComponent(() => import("./pages/ChatPage"), "ChatPage");
+const EditPage = lazyRouteComponent(() => import("./pages/EditPage"), "EditPage");
+const ImagePage = lazyRouteComponent(() => import("./pages/ImagePage"), "ImagePage");
+const EndpointsPage = lazyRouteComponent(() => import("./pages/settings/EndpointsPage"), "EndpointsPage");
+const GeneralPage = lazyRouteComponent(() => import("./pages/settings/GeneralPage"), "GeneralPage");
+const HarnessPage = lazyRouteComponent(() => import("./pages/settings/HarnessPage"), "HarnessPage");
+const MemoryPage = lazyRouteComponent(() => import("./pages/settings/MemoryPage"), "MemoryPage");
+const McpPage = lazyRouteComponent(() => import("./pages/settings/McpPage"), "McpPage");
+const SkillsPage = lazyRouteComponent(() => import("./pages/settings/SkillsPage"), "SkillsPage");
+const ModelsPage = lazyRouteComponent(() => import("./pages/settings/ModelsPage"), "ModelsPage");
+const LibraryPage = lazyRouteComponent(() => import("./pages/LibraryPage"), "LibraryPage");
+const SettingsLayout = lazyRouteComponent(() => import("./pages/settings/SettingsLayout"), "SettingsLayout");
+
+function RoutePending() {
+  return <p role="status" className="flex items-center gap-3 px-6 py-10 text-ui text-fg-2"><span className="node node-run" aria-hidden />Membuka ruang kerja</p>;
+}
 
 function NotFound() {
   return (
@@ -96,7 +100,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute.addChildren([settingsIndex, settingsEndpoints, settingsModels, settingsHarness, settingsMemory, settingsMcp, settingsSkills]),
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({ routeTree, defaultPendingComponent: RoutePending });
 
 declare module "@tanstack/react-router" {
   interface Register {

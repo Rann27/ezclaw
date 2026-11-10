@@ -55,9 +55,9 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title="Cari" width="max-w-2xl">
+    <Dialog open={open} onClose={onClose} title="Cari" width="max-w-2xl" motion={false}>
       <div className="grid gap-3">
-        <label htmlFor={`${id}-q`} className="sr-only">
+        <label htmlFor={`${id}-q`} className="text-dense font-semibold">
           Cari judul atau isi percakapan
         </label>
         <input

@@ -121,11 +121,11 @@ export function ImageComposer({ model, spec, onPickModel, running, keyMissing, t
       }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
-      className={`mx-auto mb-4 grid w-[calc(100%-2rem)] max-w-[calc(var(--read-max)+3rem)] gap-2 rounded-lg border bg-raised p-3 focus-within:border-line-strong ${dragging ? "border-brand-strong" : "border-line"}`}
+      className={`composer-surface mx-auto mb-3 grid w-[calc(100%-2rem)] max-w-[var(--work-max)] gap-1.5 ${dragging ? "border-brand-strong" : ""}`}
       aria-label="Buat gambar"
     >
       {(references.length > 0 || refsDisabledReason === null) && (
-        <div className="flex flex-wrap items-start gap-2" aria-label="Gambar referensi">
+        <div className="flex flex-wrap items-start gap-2" role="group" aria-label="Gambar referensi">
           {references.map((r, i) => (
             <div key={r.assetId} className="grid w-24 gap-1">
               <div className="relative">
@@ -167,14 +167,14 @@ export function ImageComposer({ model, spec, onPickModel, running, keyMissing, t
         </div>
       )}
 
-      <label htmlFor={`${hintId}-prompt`} className="sr-only">
+      <label htmlFor={`${hintId}-prompt`} className="composer-label">
         Prompt gambar
       </label>
       <textarea
         id={`${hintId}-prompt`}
         ref={area}
         value={text}
-        rows={2}
+        rows={1}
         onChange={(e) => onText(e.target.value)}
         onKeyDown={onKey}
         onPaste={onPaste}
@@ -183,7 +183,7 @@ export function ImageComposer({ model, spec, onPickModel, running, keyMissing, t
         className="w-full resize-none border-0 bg-transparent p-1 text-body leading-[1.62] text-fg placeholder:text-fg-3 focus-visible:outline-none"
       />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="composer-toolbar flex flex-wrap items-center gap-2">
         <ModelChip model={model} onClick={onPickModel} disabled={running} />
         <input ref={file} type="file" accept={ACCEPTED_IMAGE_TYPES} multiple hidden onChange={(e) => { void addFiles([...(e.target.files ?? [])]); e.target.value = ""; }} />
         <button

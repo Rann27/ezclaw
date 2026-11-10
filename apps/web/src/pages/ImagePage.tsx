@@ -1,5 +1,5 @@
 import type { ImageParams, ImageReference, ModelDto, SendMessageResponse, ThreadDetailDto } from "@ezclaw/core";
-import { ArrowDownIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, ImageIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +16,6 @@ import { ImageInspector } from "../components/image/ImageInspector";
 import { AssistantTurn, UserTurn, type RunRequest } from "../components/image/ImageTurn";
 import { useImageRun } from "../components/image/useImageRun";
 import { canGenerate, keys, useEndpoints, useModelProfile, useModels, useSettings, useThread } from "../lib/queries";
-import { useWide } from "../lib/useWide";
 
 const LAST_MODEL_KEY = "ezclaw.lastImageModel";
 
@@ -38,7 +37,6 @@ export function ImagePage() {
   const threadId = search.t;
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const wide = useWide();
 
   const thread = useThread(threadId);
   const models = useModels();
@@ -54,7 +52,7 @@ export function ImagePage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [logFor, setLogFor] = useState<string | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
   const [focusSignal, setFocusSignal] = useState(0);
   const [renaming, setRenaming] = useState(false);
@@ -159,7 +157,6 @@ export function ImagePage() {
   const messages = thread.data?.messages ?? [];
   const noEndpoints = endpoints.isSuccess && endpoints.data.endpoints.length === 0;
   const noImageModels = models.isSuccess && imageModels.length === 0;
-  const inspectorVisible = wide || inspectorOpen;
 
   const inspector = (
     <ImageInspector
@@ -173,21 +170,21 @@ export function ImagePage() {
   );
 
   return (
-    <div className="flex h-full min-h-0">
-      <section className="flex min-w-0 flex-1 flex-col" aria-label="Gambar">
+    <div className="workbench flex h-full min-h-0">
+      <section className="workbench-stage flex min-w-0 flex-1 flex-col" aria-label="Gambar">
         <ThreadHeader
           thread={thread.data}
           fallbackTitle="Gambar baru"
           renaming={renaming}
           setRenaming={setRenaming}
           onDelete={() => setDeleting(true)}
-          showInspectorToggle={!wide}
+          showInspectorToggle
           inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen((v) => !v)}
         />
 
-        <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto grid w-full max-w-[calc(var(--read-max)+3rem)] gap-8 px-4 py-6">
+        <div ref={scroller} onScroll={onScroll} className={`relative min-h-0 flex-1 overflow-y-auto ${!threadId && !messages.length ? "welcome-stage" : ""}`}>
+          <div className="mx-auto grid w-full max-w-[var(--work-max)] gap-4 px-4 py-4">
             {threadId && thread.isPending && (
               <p className="flex items-center gap-2 text-ui text-fg-2" role="status">
                 <span className="node node-run" aria-hidden />
@@ -263,15 +260,10 @@ export function ImagePage() {
         />
       </section>
 
-      {inspectorVisible && wide && (
-        <aside aria-label="Pengaturan gambar" className="hidden w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line bg-surface xl:block">
+      {inspectorOpen && (
+        <aside aria-label="Pengaturan gambar" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
           {inspector}
         </aside>
-      )}
-      {!wide && (
-        <Dialog open={inspectorOpen} onClose={() => setInspectorOpen(false)} title="Pengaturan gambar" width="max-w-md">
-          {inspector}
-        </Dialog>
       )}
 
       <ModelPickerDialog
@@ -328,26 +320,23 @@ export function ImagePage() {
 
 function EmptyState({ noEndpoints, noImageModels, hasModel }: { noEndpoints: boolean; noImageModels: boolean; hasModel: boolean }) {
   return (
-    <div className="grid gap-3 pt-10">
-      <h1 className="text-hero font-semibold">Buat gambar</h1>
+    <div className="welcome">
+      <span className="welcome-symbol"><ImageIcon size={30} weight="duotone" aria-hidden /></span>
+      <h2>Bayangkan. Lalu buat gambarnya.</h2>
       {noEndpoints ? (
         <>
-          <p className="max-w-prose text-body text-fg-2">Gambar dibuat lewat model di endpoint yang kamu tambahkan. Tambahkan endpoint dulu.</p>
-          <Link to="/settings/endpoints" className="btn btn-primary justify-self-start no-underline">
-            Tambah endpoint
-          </Link>
+          <p className="welcome-description">Mulai dari deskripsi atau gambar referensi. Hubungkan provider yang mendukung pembuatan gambar untuk membuka studiomu.</p>
+          <div className="welcome-actions"><Link to="/settings/endpoints" className="btn btn-primary">Hubungkan model gambar</Link></div>
         </>
       ) : noImageModels ? (
         <>
-          <p className="max-w-prose text-body text-fg-2">Belum ada model gambar. Model dari endpoint dikenali sebagai gambar kalau provider menyebut outputnya gambar. Untuk model lain, tambahkan manual dengan jenis Gambar, atau ubah jenisnya di Settings, bagian Model.</p>
-          <Link to="/settings/models" className="btn btn-primary justify-self-start no-underline">
-            Buka daftar model
-          </Link>
+          <p className="welcome-description">Endpoint sudah terhubung. Tambahkan model dengan jenis Gambar atau ubah jenis model yang sudah ada di Settings.</p>
+          <div className="welcome-actions"><Link to="/settings/models" className="btn btn-primary">Pilih model gambar</Link></div>
         </>
       ) : (
-        <p className="max-w-prose text-body text-fg-2">
-          {hasModel ? "Tulis prompt di bawah." : "Pilih model gambar di bawah, lalu tulis prompt."} Tambahkan gambar referensi kalau modelnya menerima. Pesan lanjutan seperti "ubah jadi malam hari" mengubah hasil sebelumnya, dan prompt yang dikirim ke model selalu tampil di atas hasil.
-        </p>
+        <>
+          <p className="welcome-description">{hasModel ? "Ceritakan gambar yang ada di kepalamu." : "Pilih model gambar, lalu ceritakan idemu."} Tambahkan referensi dan kembangkan hasilnya lewat percakapan.</p>
+        </>
       )}
     </div>
   );

@@ -29,7 +29,7 @@ export function McpPage() {
   const servers = mcp.data?.servers ?? [];
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <div className="grid max-w-prose gap-2 text-body text-fg-2">
         <p>
           MCP server adalah program yang memberi model <strong>tools</strong> tambahan: GitHub, browser, database, Notion, dan lainnya. EZClaw menjalankan atau menghubungi server itu, lalu tools-nya bisa dipanggil model di Agent, dan di Chat bila kamu nyalakan.
@@ -197,7 +197,7 @@ function ServerCard({ server: s, onChanged, onEdit }: { server: McpServerDto; on
             {s.prompts.map((p) => (
               <li key={`p-${p.name}`} className="px-3 py-2 text-dense">
                 <span className="rounded-xs bg-sunken px-1.5 text-meta text-fg-2">prompt</span> <code>/{s.name}:{p.name}</code>
-                {p.description && <span className="text-fg-3"> — {p.description}</span>}
+                {p.description && <span className="text-fg-3">: {p.description}</span>}
               </li>
             ))}
           </ul>

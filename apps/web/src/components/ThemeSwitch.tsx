@@ -29,7 +29,7 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
     <div
       role="radiogroup"
       aria-label="Tema"
-      className="inline-flex w-fit gap-0.5 rounded-sm border border-line bg-sunken p-0.5"
+      className={`theme-switch inline-flex w-fit gap-0.5 ${compact ? "" : "theme-switch-labeled"}`}
     >
       {OPTIONS.map((option, i) => {
         const checked = option.value === pref;
@@ -49,8 +49,8 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
             onClick={() => setPref(option.value)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={[
-              "inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xs text-dense transition-colors duration-150",
-              compact ? "w-8" : "px-3",
+              "inline-flex items-center justify-center gap-1.5 text-dense transition-colors duration-150",
+              compact ? "" : "w-auto px-3",
               checked ? "bg-brand-soft font-semibold text-brand-soft-text" : "text-fg-2 hover:text-fg",
             ].join(" ")}
           >

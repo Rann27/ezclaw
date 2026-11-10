@@ -62,16 +62,16 @@ export function ThreadList({ mode }: { mode: Mode }) {
   );
 
   return (
-    <section aria-labelledby="thread-list-title" className="flex min-h-0 flex-1 flex-col gap-1">
-      <div className="flex items-center justify-between px-2">
-        <h2 id="thread-list-title" className="text-meta font-semibold text-fg-3">
-          {mode === "agent" ? "Tugas Agent" : `Thread ${info.label}`}
-        </h2>
-      </div>
-      <Link to={base} className="btn btn-secondary justify-start no-underline" aria-label={newLabel}>
-        <PlusIcon size={16} aria-hidden />
+    <section aria-labelledby="thread-list-title" className="thread-list flex min-h-0 flex-1 flex-col gap-2">
+      <Link to={base} className="btn btn-new-thread justify-start no-underline" aria-label={newLabel}>
+        <PlusIcon size={18} aria-hidden />
         {newLabel}
       </Link>
+      <div className="flex items-center justify-between px-2">
+        <h2 id="thread-list-title" className="text-meta font-semibold text-fg-3">
+          {mode === "agent" ? "Riwayat tugas" : `Riwayat ${info.label}`}
+        </h2>
+      </div>
 
       {query.isPending && (
         <p className="flex items-center gap-2 px-2 py-1.5 text-dense text-fg-2" role="status">
@@ -206,7 +206,7 @@ function ThreadItem({ thread: t, current, base, mode, onMove, onDelete }: { thre
       ];
 
   return (
-    <li className="group relative grid">
+    <li className="thread-item group relative grid">
       <Link
         to={base}
         search={{ t: t.id }}

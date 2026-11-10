@@ -1,5 +1,5 @@
 import type { ThreadDetailDto } from "@ezclaw/core";
-import { PencilSimpleIcon, SlidersHorizontalIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
+import { PencilSimpleIcon, PushPinIcon, PushPinSlashIcon, SlidersHorizontalIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
@@ -57,7 +57,7 @@ export function ThreadHeader({
   }
 
   return (
-    <header className="flex min-h-12 flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-2">
+    <header className="thread-header">
       {renaming ? (
         <form
           className="flex min-w-0 flex-1 items-center gap-2"
@@ -87,19 +87,17 @@ export function ThreadHeader({
         </form>
       ) : (
         <>
-          <h1 className="min-w-0 basis-full truncate text-title font-semibold sm:flex-1 sm:basis-0">{thread?.title ?? fallbackTitle}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-title font-semibold">{thread?.title ?? fallbackTitle}</h1>
           {thread && (
             <>
-              <button type="button" className="btn btn-ghost" onClick={() => void patch({ pinned: !thread.pinned })} aria-pressed={thread.pinned}>
-                {thread.pinned ? "Lepas sematan" : "Sematkan"}
+              <button type="button" className="btn btn-ghost btn-icon" aria-label={thread.pinned ? "Lepas sematan" : "Sematkan"} title={thread.pinned ? "Lepas sematan" : "Sematkan"} onClick={() => void patch({ pinned: !thread.pinned })} aria-pressed={thread.pinned}>
+                {thread.pinned ? <PushPinSlashIcon size={18} aria-hidden /> : <PushPinIcon size={18} aria-hidden />}
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setRenaming(true)}>
-                <PencilSimpleIcon size={16} aria-hidden />
-                Ganti nama
+              <button type="button" className="btn btn-ghost btn-icon" aria-label="Ganti nama" title="Ganti nama" onClick={() => setRenaming(true)}>
+                <PencilSimpleIcon size={18} aria-hidden />
               </button>
-              <button type="button" className="btn btn-ghost" onClick={onDelete}>
-                <TrashIcon size={16} aria-hidden />
-                Hapus
+              <button type="button" className="btn btn-ghost btn-icon" aria-label="Hapus" title="Hapus thread" onClick={onDelete}>
+                <TrashIcon size={18} aria-hidden />
               </button>
             </>
           )}

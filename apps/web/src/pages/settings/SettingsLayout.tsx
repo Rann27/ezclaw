@@ -1,14 +1,15 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { BooksIcon, BrainIcon, CirclesThreePlusIcon, CpuIcon, GearSixIcon, PlugsConnectedIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 
 const TABS = [
-  { to: "/settings", label: "Umum", exact: true },
-  { to: "/settings/endpoints", label: "Endpoint", exact: false },
-  { to: "/settings/models", label: "Model", exact: false },
-  { to: "/settings/harness", label: "Harness", exact: false },
-  { to: "/settings/memory", label: "Memori", exact: false },
-  { to: "/settings/mcp", label: "MCP", exact: false },
-  { to: "/settings/skills", label: "Skills", exact: false },
+  { to: "/settings", label: "Umum", icon: GearSixIcon, exact: true },
+  { to: "/settings/endpoints", label: "Endpoint", icon: PlugsConnectedIcon, exact: false },
+  { to: "/settings/models", label: "Model", icon: CpuIcon, exact: false },
+  { to: "/settings/harness", label: "Harness", icon: SlidersHorizontalIcon, exact: false },
+  { to: "/settings/memory", label: "Memori", icon: BrainIcon, exact: false },
+  { to: "/settings/mcp", label: "MCP", icon: CirclesThreePlusIcon, exact: false },
+  { to: "/settings/skills", label: "Skills", icon: BooksIcon, exact: false },
 ] as const;
 
 export function SettingsLayout() {
@@ -19,27 +20,29 @@ export function SettingsLayout() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="mb-4 text-page font-semibold">Settings</h1>
-      <nav aria-label="Bagian settings" className="mb-8 flex flex-wrap gap-1 border-b border-line">
+    <div className="settings-layout">
+      <header className="settings-heading">
+        <GearSixIcon size={32} weight="duotone" aria-hidden />
+        <div><h1>Atur ruang kerjamu</h1><p>Model, koneksi, dan cara EZClaw bekerja untukmu.</p></div>
+      </header>
+      <nav aria-label="Bagian settings" className="settings-tabs">
         {TABS.map((tab) => {
           const active = tab.exact ? pathname === tab.to : pathname.startsWith(tab.to);
+          const Icon = tab.icon;
           return (
             <Link
               key={tab.to}
               to={tab.to}
               aria-current={active ? "page" : undefined}
-              className={[
-                "-mb-px min-h-9 border-b-2 px-3 py-2 text-ui no-underline transition-colors duration-150",
-                active ? "border-brand-strong font-semibold text-fg" : "border-transparent text-fg-2 hover:text-fg",
-              ].join(" ")}
+              className="settings-tab"
             >
+              <Icon size={18} weight={active ? "fill" : "regular"} aria-hidden />
               {tab.label}
             </Link>
           );
         })}
       </nav>
-      <Outlet />
+      <div className="settings-content"><Outlet /></div>
     </div>
   );
 }

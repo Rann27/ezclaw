@@ -53,7 +53,7 @@ export function ModelsPage() {
   }, [all, endpointId, onlyFavorite, query, use]);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <p className="max-w-prose text-body text-fg-2">
         Semua model dari endpoint yang tersambung. Tandai favorit agar muncul paling atas di pemilih model, beri alias, atau lihat dan ubah profil kemampuannya.
       </p>

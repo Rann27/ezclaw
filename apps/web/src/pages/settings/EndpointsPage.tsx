@@ -38,7 +38,7 @@ export function EndpointsPage() {
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-prose text-body text-fg-2">
           Endpoint adalah koneksi ke provider, gateway, server lokal, atau layanan kompatibel. Setiap model dari endpoint yang tersambung bisa dipakai di semua mode.

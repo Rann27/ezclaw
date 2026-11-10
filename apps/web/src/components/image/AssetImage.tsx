@@ -9,7 +9,7 @@ export function AssetImage({ assetId, alt, className = "", ratio, natural = fals
 
   if (url.isError) {
     return (
-      <div className={box} style={ratio ? { aspectRatio: ratio } : undefined} role="img" aria-label={alt}>
+      <div className={box} style={{ aspectRatio: ratio ?? "1 / 1" }} role="img" aria-label={alt}>
         <span className="grid justify-items-center gap-1 px-3 text-center text-meta">
           <ImageBrokenIcon size={20} aria-hidden />
           {url.error.message}
@@ -19,10 +19,10 @@ export function AssetImage({ assetId, alt, className = "", ratio, natural = fals
   }
   if (!url.data) {
     return (
-      <div className={box} style={ratio ? { aspectRatio: ratio } : undefined} role="status" aria-label="Memuat gambar">
+      <div className={box} style={{ aspectRatio: ratio ?? "1 / 1" }} role="status" aria-label="Memuat gambar">
         <span className="node node-run" aria-hidden />
       </div>
     );
   }
-  return <img src={url.data} alt={alt} className={`${natural ? "h-auto w-full" : contain ? "object-contain" : "object-cover"} ${className}`} style={ratio ? { aspectRatio: ratio } : undefined} draggable={false} />;
+  return <img src={url.data} alt={alt} className={`${natural ? "h-auto w-full" : contain ? "object-contain" : "object-cover"} ${className}`} style={{ aspectRatio: ratio ?? "auto 1 / 1" }} draggable={false} />;
 }

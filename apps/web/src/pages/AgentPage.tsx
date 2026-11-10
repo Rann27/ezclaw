@@ -2,7 +2,7 @@ import { APPROVAL_MODES, APPROVAL_MODE_LABELS, type ApprovalMode, type ChatParam
 import { ArrowDownIcon, FolderSimpleIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { FolderPicker } from "../components/agent/FolderPicker";
 import { AgentInspector } from "../components/agent/AgentInspector";
@@ -19,19 +19,7 @@ import { canAgent, keys, useCheckpoints, useEndpoints, useModels, useRecentWorks
 
 const LAST_MODEL_KEY = "ezclaw.lastAgentModel";
 const LAST_WORKSPACE_KEY = "ezclaw.lastWorkspace";
-const WIDE = "(min-width: 1280px)";
 const DEFAULT_HARNESS: ThreadHarness = { on: true, profileId: "ezclaw-agent", tools: [] };
-
-function useWide(): boolean {
-  return useSyncExternalStore(
-    (cb) => {
-      const mql = window.matchMedia(WIDE);
-      mql.addEventListener("change", cb);
-      return () => mql.removeEventListener("change", cb);
-    },
-    () => window.matchMedia(WIDE).matches,
-  );
-}
 
 function stored(key: string): string | null {
   try {
@@ -69,7 +57,6 @@ export function AgentPage() {
   const threadId = search.t;
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const wide = useWide();
 
   const thread = useThread(threadId);
   const models = useModels();
@@ -87,7 +74,7 @@ export function AgentPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [logFor, setLogFor] = useState<string | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
   const [focusSignal, setFocusSignal] = useState(0);
   const [renaming, setRenaming] = useState(false);
@@ -282,15 +269,15 @@ export function AgentPage() {
     ) : null;
 
   return (
-    <div className="flex h-full min-h-0">
-      <section className="flex min-w-0 flex-1 flex-col" aria-label="Tugas agent">
+    <div className="workbench flex h-full min-h-0">
+      <section className="workbench-stage flex min-w-0 flex-1 flex-col" aria-label="Tugas agent">
         <ThreadHeader
           thread={thread.data}
           fallbackTitle="Tugas baru"
           renaming={renaming}
           setRenaming={setRenaming}
           onDelete={() => setDeleting(true)}
-          showInspectorToggle={!wide}
+          showInspectorToggle
           inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen((v) => !v)}
         >
@@ -303,7 +290,7 @@ export function AgentPage() {
         </ThreadHeader>
 
         <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto grid w-full max-w-[72rem] gap-6 px-4 py-6">
+          <div className="mx-auto grid w-full max-w-[72rem] gap-4 px-4 py-4">
             {threadId && thread.isPending && (
               <p className="flex items-center gap-2 text-ui text-fg-2" role="status">
                 <span className="node node-run" aria-hidden />
@@ -411,15 +398,10 @@ export function AgentPage() {
         />
       </section>
 
-      {wide && (
-        <aside aria-label="Pengaturan tugas" className="hidden w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line bg-surface xl:block">
+      {inspectorOpen && (
+        <aside aria-label="Pengaturan tugas" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
           {inspector}
         </aside>
-      )}
-      {!wide && (
-        <Dialog open={inspectorOpen} onClose={() => setInspectorOpen(false)} title="Pengaturan tugas" width="max-w-md">
-          {inspector}
-        </Dialog>
       )}
 
       <ModelPickerDialog accept={canAgent} open={pickerOpen} onClose={() => { setPickerOpen(false); setFocusSignal((n) => n + 1); }} selectedId={chosen?.id ?? null} onSelect={(m) => update({ modelId: m.id })} />
@@ -595,23 +577,21 @@ function NewTask({ noEndpoints, value, onChange, recent }: { noEndpoints: boolea
 
   if (noEndpoints) {
     return (
-      <div className="grid gap-3 py-8">
-        <h1 className="text-hero font-semibold">Belum ada model</h1>
-        <p className="text-body text-fg-2">Agent butuh model yang mendukung tool calling. Tambahkan endpoint dulu.</p>
-        <Link to="/settings/endpoints" className="btn btn-primary justify-self-start no-underline">
-          Tambah endpoint
-        </Link>
+      <div className="welcome">
+        <span className="welcome-symbol"><FolderSimpleIcon size={30} weight="duotone" aria-hidden /></span>
+        <h2>Dari rencana ke pekerjaan selesai.</h2>
+        <p className="welcome-description">Agent bisa membaca file, mengubah kode, dan menjalankan perintah di folder pilihanmu. Hubungkan model yang mendukung tools untuk mulai.</p>
+        <div className="welcome-actions"><Link to="/settings/endpoints" className="btn btn-primary">Hubungkan model</Link></div>
       </div>
     );
   }
 
   return (
-    <section className="grid gap-4 py-6" aria-labelledby="new-task">
-      <h1 id="new-task" className="text-hero font-semibold">
-        Mulai tugas agent
-      </h1>
+    <section className="agent-welcome grid gap-3" aria-labelledby="new-task">
+      <span className="welcome-symbol mb-0"><FolderSimpleIcon size={30} weight="duotone" aria-hidden /></span>
+      <h2 id="new-task" className="font-semibold">Beri agent ruang untuk bekerja.</h2>
       <p className="max-w-prose text-body text-fg-2">Agent bekerja di satu folder: membaca dan mengubah file di sana, dan menjalankan perintah. Pilih foldernya, lalu jelaskan tugasnya di bawah.</p>
-      <div className="grid gap-2">
+      <div className="agent-workspace-field grid gap-3">
         <label htmlFor={id} className="text-dense font-semibold">
           Folder workspace
         </label>

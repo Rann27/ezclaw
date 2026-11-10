@@ -11,7 +11,7 @@ import { useTheme } from "../../theme";
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="grid gap-4 border-t border-line py-8 first-of-type:border-t-0 first-of-type:pt-0">
+    <section aria-labelledby={id} className="settings-section grid gap-3">
       <h2 id={id} className="text-title font-semibold">
         {title}
       </h2>
@@ -30,7 +30,7 @@ const ROLE_NOTE: Record<ModelRole, string> = {
   image: "Dipakai untuk thread Image baru.",
   edit: "Dipakai untuk Edit baru; kosong berarti ikut model Image.",
   composer: "Menyusun prompt gambar dan merapikan prompt edit.",
-  title: "Judul dan ringkasan thread, mulai M2.",
+  title: "Memberi judul dan ringkasan untuk thread.",
   vision: "Dipakai saat pesan Chat berisi gambar tetapi modelnya tidak menerima gambar. Kosong: dipilih otomatis dari model yang menerima gambar.",
 };
 
@@ -141,7 +141,7 @@ function DefaultModels() {
         const kind = IMAGE_ROLES.includes(role) ? "image" : "text";
         const options: ModelDto[] = all.filter((m) => (role === "vision" ? m.kind === "text" && m.summary.inputModalities.includes("image") : m.kind === kind || (kind === "image" && m.summary.outputModalities.includes("image"))));
         return (
-          <div key={role} className="grid gap-1 sm:grid-cols-[12rem_minmax(0,1fr)] sm:items-center sm:gap-4">
+          <div key={role} className="grid grid-cols-[15rem_minmax(0,1fr)] items-center gap-3">
             <label htmlFor={`role-${role}`} className="text-ui font-semibold">
               {MODEL_ROLE_LABELS[role]}
               <span className="block text-meta font-normal text-fg-3">{ROLE_NOTE[role]}</span>

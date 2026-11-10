@@ -14,7 +14,7 @@ export function MemoryPage() {
   const active = all.filter((m) => m.status === "active");
 
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-4">
       <div className="grid max-w-prose gap-2 text-body text-fg-2">
         <p>Memori adalah catatan singkat yang ikut dikirim di wrapper setiap thread, supaya model ingat preferensimu dan fakta proyek tanpa kamu ulangi.</p>
         <p>

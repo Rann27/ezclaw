@@ -1,5 +1,5 @@
 import type { LibraryItem, LibraryResponse } from "@ezclaw/core";
-import { DownloadSimpleIcon, HeartIcon, PaintBrushIcon } from "@phosphor-icons/react";
+import { DownloadSimpleIcon, HeartIcon, ImagesIcon, PaintBrushIcon } from "@phosphor-icons/react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useId, useState } from "react";
@@ -51,13 +51,13 @@ export function LibraryPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto grid max-w-6xl gap-5 px-6 py-8">
-        <div className="grid gap-1">
-          <h1 className="text-page font-semibold">Library</h1>
+      <div className="library-layout mx-auto grid max-w-[1280px] gap-4">
+        <header className="library-heading">
+          <h1>Library gambar</h1>
           <p className="text-body text-fg-2">Semua gambar dari Image dan Edit. Klik gambar untuk melihat prompt, model, dan tindakan lanjutan.</p>
-        </div>
+        </header>
 
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="library-filters flex flex-wrap items-end gap-3">
           <div className="grid min-w-56 flex-1 gap-1">
             <label htmlFor={`${id}-q`} className="text-dense font-semibold">
               Cari prompt
@@ -99,9 +99,7 @@ export function LibraryPage() {
           </p>
         )}
         {lib.isError && (
-          <p className="rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text" role="alert">
-            {lib.error.message}
-          </p>
+          <p className="rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text" role="alert">{lib.error.message}</p>
         )}
         {lib.isSuccess && (
           <p className="text-dense text-fg-3" role="status">
@@ -109,7 +107,8 @@ export function LibraryPage() {
           </p>
         )}
         {lib.isSuccess && total === 0 && (
-          <div className="grid gap-2 rounded-md border border-line bg-surface p-6">
+          <div className="library-empty rounded-md border border-line bg-surface">
+            <ImagesIcon size={36} weight="duotone" aria-hidden />
             <h2 className="text-title font-semibold">{q || mode || model || favorite ? "Tidak ada yang cocok" : "Belum ada gambar"}</h2>
             <p className="text-dense text-fg-2">
               {q || mode || model || favorite ? "Ubah pencarian atau filter di atas." : "Gambar yang kamu buat di Image atau Edit akan terkumpul di sini."}
@@ -124,7 +123,7 @@ export function LibraryPage() {
                 <AssetImage assetId={item.assetId} alt="" className="aspect-square w-full" />
               </button>
               {item.favorite && (
-                <span className="absolute top-2 right-2 rounded-full bg-surface p-1 text-danger-text" aria-label="Favorit">
+                <span className="absolute top-2 right-2 rounded-full bg-surface p-1 text-danger-text" role="img" aria-label="Favorit">
                   <HeartIcon size={14} weight="fill" aria-hidden />
                 </span>
               )}

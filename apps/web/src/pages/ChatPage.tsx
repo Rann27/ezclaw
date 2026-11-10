@@ -1,8 +1,8 @@
 import type { ChatParams, MessageDto, ModelDto, SendMessageResponse, ThreadDetailDto, ThreadHarness } from "@ezclaw/core";
-import { ArrowDownIcon, GlobeIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon, ChatTextIcon, GlobeIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { Dialog } from "../components/Dialog";
 import { ModelPickerDialog } from "../components/ModelPicker";
@@ -19,7 +19,6 @@ import { useSlashItems } from "../components/chat/SlashMenu";
 import { canAgent, canChat, keys, useEndpoints, useModels, useSettings, useThread } from "../lib/queries";
 
 const LAST_MODEL_KEY = "ezclaw.lastModel";
-const WIDE = "(min-width: 1280px)";
 
 const CHAT_HARNESS: ThreadHarness = { on: true, profileId: "ezclaw-chat", tools: [] };
 
@@ -28,17 +27,6 @@ interface Draft {
   systemPrompt: string;
   params: ChatParams;
   harness: ThreadHarness;
-}
-
-function useWide(): boolean {
-  return useSyncExternalStore(
-    (cb) => {
-      const mql = window.matchMedia(WIDE);
-      mql.addEventListener("change", cb);
-      return () => mql.removeEventListener("change", cb);
-    },
-    () => window.matchMedia(WIDE).matches,
-  );
 }
 
 function readLastModel(): string | null {
@@ -86,7 +74,6 @@ export function ChatPage() {
   const threadId = search.t;
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const wide = useWide();
 
   const thread = useThread(threadId);
   const models = useModels();
@@ -114,7 +101,7 @@ export function ChatPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [logFor, setLogFor] = useState<string | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
   const [focusSignal, setFocusSignal] = useState(0);
   const [renaming, setRenaming] = useState(false);
@@ -239,7 +226,6 @@ export function ChatPage() {
   const keyMissing = !!endpoint && endpoint.needsKey && !endpoint.hasKey;
   const messages = thread.data?.messages ?? [];
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
-  const inspectorVisible = wide || inspectorOpen;
 
   const inspector = (
     <Inspector
@@ -259,20 +245,20 @@ export function ChatPage() {
   const noEndpoints = endpoints.isSuccess && endpoints.data.endpoints.length === 0;
 
   return (
-    <div className="flex h-full min-h-0">
-      <section className="flex min-w-0 flex-1 flex-col" aria-label="Percakapan">
+    <div className="workbench flex h-full min-h-0">
+      <section className="workbench-stage flex min-w-0 flex-1 flex-col" aria-label="Percakapan">
         <ThreadHeader
           thread={thread.data}
           renaming={renaming}
           setRenaming={setRenaming}
           onDelete={() => setDeleting(true)}
-          showInspectorToggle={!wide}
+          showInspectorToggle
           inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen((v) => !v)}
         />
 
-        <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto grid w-full max-w-[calc(var(--read-max)+3rem)] gap-8 px-4 py-6">
+        <div ref={scroller} onScroll={onScroll} className={`relative min-h-0 flex-1 overflow-y-auto ${!threadId && !messages.length ? "welcome-stage" : ""}`}>
+          <div className="mx-auto grid w-full max-w-[var(--work-max)] gap-4 px-4 py-4">
             {threadId && thread.isPending && (
               <p className="flex items-center gap-2 text-ui text-fg-2" role="status">
                 <span className="node node-run" aria-hidden />
@@ -373,15 +359,10 @@ export function ChatPage() {
         />
       </section>
 
-      {inspectorVisible && wide && (
-        <aside aria-label="Pengaturan percakapan" className="hidden w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line bg-surface xl:block">
+      {inspectorOpen && (
+        <aside aria-label="Pengaturan percakapan" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
           {inspector}
         </aside>
-      )}
-      {!wide && (
-        <Dialog open={inspectorOpen} onClose={() => setInspectorOpen(false)} title="Pengaturan percakapan" width="max-w-md">
-          {inspector}
-        </Dialog>
       )}
 
       <ModelPickerDialog accept={canChat} open={pickerOpen} onClose={() => { setPickerOpen(false); setFocusSignal((n) => n + 1); }} selectedId={chosen?.id ?? null} onSelect={(m) => update({ modelId: m.id })} />
@@ -427,21 +408,16 @@ export function ChatPage() {
 }
 
 function EmptyState({ noEndpoints, hasModel }: { noEndpoints: boolean; hasModel: boolean }) {
-  if (noEndpoints) {
-    return (
-      <div className="grid gap-3 py-10">
-        <h1 className="text-hero font-semibold">Belum ada model</h1>
-        <p className="text-body text-fg-2">Tambahkan API key OpenRouter, Venice, atau provider lain untuk mulai. Key disimpan di penyimpanan kredensial komputer ini.</p>
-        <Link to="/settings/endpoints" className="btn btn-primary justify-self-start no-underline">
-          Tambah endpoint
-        </Link>
-      </div>
-    );
-  }
   return (
-    <div className="grid gap-3 py-10">
-      <h1 className="text-hero font-semibold">Mulai percakapan</h1>
-      <p className="text-body text-fg-2">{hasModel ? "Tulis pesan pertamamu di bawah. Parameter dan system prompt ada di panel pengaturan." : "Pilih model di bawah, lalu tulis pesan pertamamu."}</p>
+    <div className="welcome">
+      <span className="welcome-symbol"><ChatTextIcon size={30} weight="duotone" aria-hidden /></span>
+      <h2>Apa yang ingin kamu kerjakan?</h2>
+      <p className="welcome-description">{noEndpoints ? "Hubungkan model pilihanmu untuk mulai berdiskusi, mengolah ide, atau menyelesaikan pekerjaan." : hasModel ? "Ada ide, pertanyaan, atau sesuatu yang ingin diselesaikan? Mulai dari sini." : "Pilih model, lalu mulai dengan ide atau pertanyaanmu. Kamu bisa berganti model kapan saja."}</p>
+      {noEndpoints ? (
+        <div className="welcome-actions">
+          <Link to="/settings/endpoints" className="btn btn-primary">Hubungkan model</Link>
+        </div>
+      ) : null}
     </div>
   );
 }

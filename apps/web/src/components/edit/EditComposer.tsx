@@ -63,7 +63,15 @@ export function EditComposer(p: Props) {
   const maxInputs = p.spec?.maxInputImages ?? 0;
   const maxRefs = Math.max(0, maxInputs - 1);
   const cannotEdit = !!p.model && !!p.spec && maxInputs < 1;
-  const refsReason = !p.model ? "Pilih model dulu." : !p.spec ? "Memuat kemampuan model." : cannotEdit ? "Model ini tidak menerima gambar input." : maxRefs === 0 ? "Model ini hanya menerima gambar yang diedit, tanpa referensi." : null;
+  const refsReason = !p.model
+    ? "Pilih model dulu."
+    : !p.spec
+      ? "Memuat kemampuan model."
+      : cannotEdit
+        ? "Model ini tidak menerima gambar input."
+        : maxRefs === 0
+          ? "Model ini hanya menerima gambar yang diedit, tanpa referensi."
+          : null;
   const missingRole = p.references.some((r) => !r.role);
   const overLimit = p.references.length > maxRefs && maxRefs >= 0 && p.spec ? p.references.length - maxRefs : 0;
 
@@ -114,7 +122,11 @@ export function EditComposer(p: Props) {
     void add([...e.dataTransfer.files]);
   };
 
-  const ratios = p.spec?.aspectRatios.length ? { label: "Rasio", key: "aspectRatio" as const, options: p.spec.aspectRatios } : p.spec?.sizes.length ? { label: "Ukuran", key: "size" as const, options: p.spec.sizes } : null;
+  const ratios = p.spec?.aspectRatios.length
+    ? { label: "Rasio", key: "aspectRatio" as const, options: p.spec.aspectRatios }
+    : p.spec?.sizes.length
+      ? { label: "Ukuran", key: "size" as const, options: p.spec.sizes }
+      : null;
   const maxN = p.spec?.maxN ?? 1;
   const toggleKeep = (k: KeepId) => p.onKeep(p.keep.includes(k) ? p.keep.filter((x) => x !== k) : [...p.keep, k]);
 
@@ -128,13 +140,19 @@ export function EditComposer(p: Props) {
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
       aria-label="Edit gambar"
-      className={`mx-auto mb-4 grid w-[calc(100%-2rem)] max-w-[calc(var(--read-max)+3rem)] gap-3 rounded-lg border bg-raised p-3 focus-within:border-line-strong ${dragging ? "border-brand-strong" : "border-line"}`}
+      className={`composer-surface edit-composer mx-auto mb-3 grid w-[calc(100%-2rem)] max-w-[var(--work-max)] gap-1.5 ${dragging ? "border-brand-strong" : ""}`}
     >
       <div className="grid gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-meta font-semibold text-fg-2">Referensi {p.references.length > 0 && `(${p.references.length})`}</h3>
           {p.references.length === 0 && p.uploading === 0 && (
-            <button type="button" className="btn btn-secondary min-h-8 px-2 text-dense" disabled={!!refsReason || p.running} title={refsReason ?? "Tambah gambar referensi"} onClick={() => file.current?.click()}>
+            <button
+              type="button"
+              className="btn btn-secondary min-h-8 px-2 text-dense"
+              disabled={!!refsReason || p.running}
+              title={refsReason ?? "Tambah gambar referensi"}
+              onClick={() => file.current?.click()}
+            >
               <ImagesIcon size={14} aria-hidden />
               Tambah referensi
             </button>
@@ -146,12 +164,17 @@ export function EditComposer(p: Props) {
             <div key={r.assetId} className="grid w-24 gap-1">
               <div className="relative">
                 <AssetImage assetId={r.assetId} alt={`Referensi ${i + 1}`} className="h-24 w-24 rounded-sm" />
-                <button type="button" className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface text-fg shadow-popover" aria-label={`Hapus referensi ${i + 1}`} onClick={() => p.onReferences(p.references.filter((x) => x.assetId !== r.assetId))}>
+                <button
+                  type="button"
+                  className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-surface text-fg shadow-popover"
+                  aria-label={`Hapus referensi ${i + 1}`}
+                  onClick={() => p.onReferences(p.references.filter((x) => x.assetId !== r.assetId))}
+                >
                   <XIcon size={12} aria-hidden />
                 </button>
                 {i >= maxRefs && p.spec && <span className="absolute bottom-1 left-1 rounded-sm bg-surface px-1 text-meta text-fg-2">tidak dikirim</span>}
               </div>
-              <label className="sr-only" htmlFor={`${uid}-role-${i}`}>
+              <label className="text-meta text-fg-2" htmlFor={`${uid}-role-${i}`}>
                 Peran referensi {i + 1}
               </label>
               <select
@@ -178,9 +201,25 @@ export function EditComposer(p: Props) {
               Mengunggah
             </div>
           )}
-          <input ref={file} type="file" accept={ACCEPTED_IMAGE_TYPES} multiple hidden onChange={(e) => { void add([...(e.target.files ?? [])]); e.target.value = ""; }} />
+          <input
+            ref={file}
+            type="file"
+            accept={ACCEPTED_IMAGE_TYPES}
+            multiple
+            hidden
+            onChange={(e) => {
+              void add([...(e.target.files ?? [])]);
+              e.target.value = "";
+            }}
+          />
           {p.references.length > 0 && (
-            <button type="button" className="btn btn-secondary h-24 w-24 flex-col" disabled={!!refsReason || p.running} title={refsReason ?? "Tambah gambar referensi"} onClick={() => file.current?.click()}>
+            <button
+              type="button"
+              className="btn btn-secondary h-24 w-24 flex-col"
+              disabled={!!refsReason || p.running}
+              title={refsReason ?? "Tambah gambar referensi"}
+              onClick={() => file.current?.click()}
+            >
               <ImagesIcon size={18} aria-hidden />
               Tambah
             </button>
@@ -201,14 +240,14 @@ export function EditComposer(p: Props) {
         </div>
       </div>
 
-      <label htmlFor={`${uid}-text`} className="sr-only">
+      <label htmlFor={`${uid}-text`} className="composer-label">
         Instruksi edit
       </label>
       <textarea
         id={`${uid}-text`}
         ref={area}
         value={p.text}
-        rows={2}
+        rows={1}
         onChange={(e) => p.onText(e.target.value)}
         onKeyDown={onKey}
         onPaste={onPaste}
@@ -216,10 +255,10 @@ export function EditComposer(p: Props) {
         className="w-full resize-none border-0 bg-transparent p-1 text-body leading-[1.62] text-fg placeholder:text-fg-3 focus-visible:outline-none"
       />
 
-      <details className="rounded-sm bg-sunken px-3 py-2">
+      <details className="rounded-sm bg-sunken px-2 py-1.5">
         <summary className="cursor-pointer text-dense font-semibold text-fg-2">{p.manual !== null ? "Prompt diubah manual" : "Lihat atau ubah prompt yang akan dikirim"}</summary>
         <div className="mt-2 grid gap-2">
-          <label htmlFor={`${uid}-compiled`} className="sr-only">
+          <label htmlFor={`${uid}-compiled`} className="text-meta font-semibold text-fg-2">
             Prompt hasil kompilasi
           </label>
           <textarea
@@ -236,19 +275,27 @@ export function EditComposer(p: Props) {
                 Kembali ke template
               </button>
             )}
-            <span className="text-meta text-fg-3">{p.manual !== null ? "Dikirim apa adanya, dengan gambar tetap berurutan: yang diedit lebih dulu." : "Template ini menyebut urutan gambar, peran referensi, dan hal yang dipertahankan."}</span>
+            <span className="text-meta text-fg-3">
+              {p.manual !== null ? "Dikirim apa adanya, dengan gambar tetap berurutan: yang diedit lebih dulu." : "Template ini menyebut urutan gambar, peran referensi, dan hal yang dipertahankan."}
+            </span>
           </div>
         </div>
       </details>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="composer-toolbar flex flex-wrap items-center gap-2">
         <ModelChip model={p.model} onClick={p.onPickModel} disabled={p.running} />
         {ratios && (
           <>
             <label htmlFor={`${uid}-ratio`} className="sr-only">
               {ratios.label}
             </label>
-            <select id={`${uid}-ratio`} className="select w-auto" value={p.params[ratios.key] ?? ""} disabled={p.running} onChange={(e) => p.onParams({ ...p.params, [ratios.key]: e.target.value || undefined })}>
+            <select
+              id={`${uid}-ratio`}
+              className="select w-auto"
+              value={p.params[ratios.key] ?? ""}
+              disabled={p.running}
+              onChange={(e) => p.onParams({ ...p.params, [ratios.key]: e.target.value || undefined })}
+            >
               <option value="">{ratios.label}: bawaan</option>
               {ratios.options.map((o) => (
                 <option key={o} value={o}>

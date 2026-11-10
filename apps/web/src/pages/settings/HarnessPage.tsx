@@ -38,7 +38,7 @@ export function HarnessPage() {
   const profiles = harness.data?.profiles ?? [];
 
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-4">
       <div className="grid max-w-prose gap-2 text-body text-fg-2">
         <p>
           Harness adalah <strong>wrapper prompt</strong> yang membungkus setiap permintaan: siapa modelnya, cara bekerja, cara menjawab, dan batas keamanannya. Untuk Agent, harness juga menentukan tools dan aturan loop.

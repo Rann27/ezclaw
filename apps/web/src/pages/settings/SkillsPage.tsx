@@ -16,7 +16,7 @@ export function SkillsPage() {
   const list = skills.data?.skills ?? [];
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <div className="grid max-w-prose gap-2 text-body text-fg-2">
         <p>
           Skill adalah folder berisi <code>SKILL.md</code>: instruksi untuk tugas tertentu (misalnya menulis catatan rilis atau membuat laporan). Model melihat nama dan deskripsinya, lalu membaca isinya saat tugasnya cocok.

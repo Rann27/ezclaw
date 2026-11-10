@@ -9,13 +9,14 @@ interface DialogProps {
   /** Tailwind max-width class for the panel. */
   width?: string;
   footer?: ReactNode;
+  motion?: boolean;
 }
 
 /**
  * Native <dialog>: focus is trapped, Esc closes, and focus returns to the opener.
  * Content mounts only while open so forms start fresh each time.
  */
-export function Dialog({ open, onClose, title, children, width = "max-w-lg", footer }: DialogProps) {
+export function Dialog({ open, onClose, title, children, width = "max-w-lg", footer, motion = true }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -39,10 +40,10 @@ export function Dialog({ open, onClose, title, children, width = "max-w-lg", foo
         // A click on the backdrop lands on the dialog element itself.
         if (e.target === ref.current) onClose();
       }}
-      className={`m-auto w-[calc(100vw-2rem)] ${width} rounded-lg bg-raised p-0 text-fg shadow-modal backdrop:bg-scrim`}
+      className={`ez-dialog ${motion ? "ez-dialog-motion" : ""} m-auto w-[calc(100vw-2rem)] ${width} rounded-lg bg-raised p-0 text-fg shadow-modal backdrop:bg-scrim`}
     >
       {open && (
-        <div className="flex max-h-[85vh] flex-col">
+        <div className="flex max-h-[85dvh] flex-col">
           <header className="flex items-center justify-between gap-4 border-b border-line px-5 py-3">
             <h2 id={titleId} className="text-title font-semibold">
               {title}
