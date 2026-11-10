@@ -97,7 +97,9 @@
   button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
   button { touch-action: manipulation; }
   ::selection { background: var(--brand-soft); color: var(--brand-soft-text); }
-  * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+  /* Quiet until the pointer is over the area, so side-by-side panels do not show two bold bars. */
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--text-3) 30%, transparent) transparent; }
+  *:hover { scrollbar-color: color-mix(in oklab, var(--text-3) 70%, transparent) transparent; }
   :focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
@@ -433,13 +435,14 @@
   .thread-item > a { min-height: 28px; padding-left: 8px; }
   .thread-item > button { min-height: 28px; min-width: 28px; }
   .app-workspace {
-    min-width: 0; min-height: 0; flex: 1; margin: 6px 6px 6px 0;
-    overflow: auto; background: var(--raised); border: 1px solid var(--line); border-radius: 14px;
+    display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; margin: 6px 6px 6px 0;
+    overflow: hidden; background: var(--raised); border: 1px solid var(--line); border-radius: 14px;
   }
+  .workspace-body { flex: 1; min-height: 0; overflow: auto; }
   .workbench { overflow: hidden; background: var(--raised); }
   .workbench-stage { min-width: 0; background: linear-gradient(180deg, var(--raised) 65%, var(--surface)); }
   .thread-header {
-    position: relative; z-index: 10; display: flex; min-height: 44px; flex-wrap: wrap;
+    z-index: 10; display: flex; min-height: 44px; flex-wrap: wrap;
     align-items: center; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--line);
     background: var(--raised);
   }
@@ -450,6 +453,15 @@
   .workspace-inspector > div > section + section { border-top: 1px solid var(--line); padding-top: 12px; }
   .workspace-inspector h2 { color: var(--text); font-size: 13px; }
   .workspace-inspector .model-chip { width: 100%; }
+  /*
+    The panel is a fixed 264px. Grid and flex items otherwise refuse to shrink below their content,
+    so one long model name or tool list widened the whole column and the panel scrolled sideways.
+    :where() keeps this at zero specificity, so a deliberate min-width utility still wins.
+  */
+  .workspace-inspector { overflow-x: hidden; }
+  .workspace-inspector :where(*) { min-width: 0; }
+  .workspace-inspector :where(.grid) { grid-template-columns: minmax(0, 1fr); }
+  .workspace-inspector :where(p, code, li, label, span) { overflow-wrap: anywhere; }
   .workspace-inspector .input, .workspace-inspector .textarea, .workspace-inspector .select { background: var(--raised); }
   .welcome-stage { display: flex; flex-direction: column; }
   .welcome-stage > div:first-child { display: flex; flex: 1; flex-direction: column; justify-content: flex-start; align-content: start; }
@@ -517,16 +529,100 @@
   .skip-link:focus { transform: translateY(0); }
 }
 
-@supports (backdrop-filter: blur(12px)) {
+/*
+  Floating chrome: the thread header and the composer sit over the scrolling work, which passes
+  under them. Shell measures their heights into --float-top/--float-bottom, so the first and last
+  message always clear them.
+*/
+@layer components {
+  .workbench-stage { position: relative; }
+  .workbench-stage > .thread-header { position: absolute; inset: 0 0 auto 0; }
+  .workbench-stage > form { position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; }
+  /* The hint line under the composer has no surface of its own; a short fade keeps it off the text passing behind. */
+  .workbench-stage > form.composer-wrap { pointer-events: none; background: linear-gradient(to top, var(--raised) 26px, transparent 56px); }
+  .workbench-stage > form.composer-wrap > * { pointer-events: auto; }
+  .workbench-stage > div.overflow-y-auto {
+    padding-top: var(--float-top, 44px);
+    padding-bottom: var(--float-bottom, 140px);
+    scroll-padding-block: var(--float-top, 44px) var(--float-bottom, 140px);
+  }
+  .workbench-stage .sticky.bottom-3 { bottom: calc(var(--float-bottom, 0px) + 12px); }
+
+  /* Solid fallback for dialogs and menus; @supports below turns them translucent. */
+  .glass-strong { background: var(--raised); border-color: var(--line); }
+}
+
+/*
+  Glass marks what floats over the work: header, composer, dialogs and menus (the owner's choice,
+  beyond antislop R-10's 1-2 element cap). Lists, cards and the inspector stay solid so long text
+  keeps a calm ground.
+*/
+@supports (backdrop-filter: blur(1px)) {
   @layer components {
-    .thread-header, .composer-surface { background: var(--glass); backdrop-filter: blur(12px); }
+    .thread-header {
+      background: var(--glass);
+      backdrop-filter: blur(var(--blur)) saturate(1.5);
+      border-bottom-color: var(--glass-edge);
+    }
+    .composer-surface {
+      background: var(--glass);
+      backdrop-filter: blur(var(--blur)) saturate(1.5);
+    }
+    .glass-strong {
+      background: color-mix(in oklab, var(--raised) 82%, transparent);
+      backdrop-filter: blur(calc(var(--blur) * 1.4)) saturate(1.6);
+      border-color: var(--glass-edge);
+    }
+    .ez-dialog::backdrop { backdrop-filter: blur(3px); }
+  }
+}
+
+/* Material state layer: one tint on hover and a deeper one on press, for every flat control. */
+@layer components {
+  .btn, .rail-link, .settings-tab, .model-chip, .chip-toggle, .rail-search { position: relative; isolation: isolate; }
+  .btn::after, .rail-link::after, .settings-tab::after, .model-chip::after, .chip-toggle::after, .rail-search::after {
+    content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+    background: currentColor; opacity: 0; pointer-events: none;
+    transition: opacity var(--t-fast) var(--ease);
+  }
+  .btn:hover:not(:disabled)::after, .rail-link:hover::after, .settings-tab:hover::after,
+  .model-chip:hover:not(:disabled)::after, .chip-toggle:hover:not(:disabled)::after, .rail-search:hover::after { opacity: 0.06; }
+  .btn:active:not(:disabled)::after, .rail-link:active::after, .settings-tab:active::after,
+  .model-chip:active:not(:disabled)::after, .chip-toggle:active:not(:disabled)::after, .rail-search:active::after { opacity: 0.12; }
+  .btn-primary { transition: background-color var(--t-fast) ease, box-shadow var(--t-base) var(--ease), transform var(--t-fast) var(--ease); }
+  .btn-primary:hover:not(:disabled) { box-shadow: 0 2px 8px color-mix(in oklab, var(--brand) 35%, transparent); }
+  .rail-link > svg { transition: transform var(--t-base) var(--ease); }
+  .rail-link:hover > svg { transform: translateX(2px); }
+
+  /* Theme changes fade instead of flashing. */
+  body, .app-rail, .app-workspace, .workspace-inspector, .thread-header, .settings-section {
+    transition-property: background-color, border-color, color;
+    transition-duration: var(--t-base);
+    transition-timing-function: var(--ease);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @layer components {
+    /* A new message, timeline step, or thread rises in once; nothing loops. */
+    .user-message, .assistant-message, .thread-item {
+      transition: opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease);
+    }
+    @starting-style {
+      .user-message, .assistant-message, .thread-item { opacity: 0; transform: translateY(8px); }
+    }
+    /* The composer lifts while you write, so the surface you are using is the one in front. */
+    .composer-surface {
+      transition: border-color var(--t-fast) ease, box-shadow var(--t-base) var(--ease), transform var(--t-base) var(--ease), background-color var(--t-base) var(--ease);
+    }
+    .composer-surface:focus-within { transform: translateY(-2px); box-shadow: var(--shadow-pop); }
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   @layer components {
     .ez-dialog-motion {
-      opacity: 0; transform: translateY(8px) scale(0.98);
+      opacity: 0; transform: translateY(12px) scale(0.96);
       transition: opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease), display var(--t-base) allow-discrete, overlay var(--t-base) allow-discrete;
     }
     .ez-dialog-motion[open] { opacity: 1; transform: translateY(0) scale(1); }
@@ -534,9 +630,9 @@
     .ez-dialog-motion[open]::backdrop { opacity: 1; }
     .workspace-inspector { transition: opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease); }
     @starting-style {
-      .ez-dialog-motion[open] { opacity: 0; transform: translateY(8px) scale(0.98); }
+      .ez-dialog-motion[open] { opacity: 0; transform: translateY(12px) scale(0.96); }
       .ez-dialog-motion[open]::backdrop { opacity: 0; }
-      .workspace-inspector { opacity: 0; transform: translateX(8px); }
+      .workspace-inspector { opacity: 0; transform: translateX(16px); }
     }
   }
 }

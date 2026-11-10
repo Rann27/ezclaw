@@ -6,8 +6,8 @@
   --raised: #FFFFFF;
   --sunken: #E9EEE5;
   --rail-bg: #E4EBDD;
-  --glass: rgb(255 255 255 / 0.86);
-  --glass-edge: rgb(255 255 255 / 0.9);
+  --glass: rgb(255 255 255 / 0.68);
+  --glass-edge: rgb(255 255 255 / 0.75);
   --line: #DAE2D5;
   --line-strong: #7A8772;
   --text: #20291E;
@@ -29,6 +29,7 @@
   --danger-text: #A3372A;
   --danger-soft: #F6E0DB;
   --focus: #496030;
+  --state: rgb(32 41 30 / 0.06);
   --shadow-pop: 0 2px 4px rgb(32 41 30 / 0.04), 0 12px 32px rgb(32 41 30 / 0.12);
   --shadow-dialog: 0 8px 24px rgb(32 41 30 / 0.08), 0 32px 80px rgb(32 41 30 / 0.2);
   --shadow-composer: 0 2px 6px rgb(32 41 30 / 0.03), 0 8px 28px rgb(32 41 30 / 0.06);
@@ -62,10 +63,13 @@
   --r-md: 10px;
   --r-lg: 14px;
   --r-full: 999px;
-  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --t-fast: 140ms;
-  --t-base: 220ms;
+  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --t-fast: 180ms;
+  --t-base: 300ms;
+  --t-slow: 450ms;
+  --blur: 18px;
   --rail-w: 208px;
   --inspector-w: 264px;
   --read-max: 78ch;
@@ -77,73 +81,75 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #171E16;
-    --surface: #20291E;
-    --raised: #283225;
-    --sunken: #1A2218;
-    --rail-bg: #1C251A;
-    --glass: rgb(40 50 37 / 0.9);
-    --glass-edge: rgb(172 194 153 / 0.13);
-    --line: #35422F;
-    --line-strong: #809375;
-    --text: #EEF3E8;
-    --text-2: #BFCCB5;
-    --text-3: #A3B499;
+    --bg: #141415;
+    --surface: #1C1C1E;
+    --raised: #232325;
+    --sunken: #18181A;
+    --rail-bg: #18181A;
+    --glass: rgb(38 38 41 / 0.66);
+    --glass-edge: rgb(255 255 255 / 0.09);
+    --line: #2C2C30;
+    --line-strong: #6B6C73;
+    --text: #ECECEE;
+    --text-2: #B9BAC0;
+    --text-3: #9C9DA4;
     --brand-hover: #A3B784;
     --brand-ink: #141A0C;
     --brand-strong: #A2BC80;
     --brand-text: #B4CE93;
-    --brand-soft: #35452A;
+    --brand-soft: #2B3424;
     --brand-soft-text: #D6E8BF;
-    --ember-ink: #141A0C;
+    --ember-ink: #141415;
     --ember-text: #EDB16E;
-    --ember-soft: #3A2A18;
+    --ember-soft: #3A2C1C;
     --danger: #F2A08F;
-    --danger-ink: #171E16;
+    --danger-ink: #141415;
     --danger-text: #F2A08F;
-    --danger-soft: #402820;
+    --danger-soft: #3D2622;
     --focus: #B4CE93;
-    --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.2), 0 16px 40px rgb(0 0 0 / 0.25);
-    --shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.2), 0 32px 80px rgb(0 0 0 / 0.4);
-    --shadow-composer: 0 4px 24px rgb(0 0 0 / 0.18);
-    --scrim: rgb(6 12 5 / 0.7);
+    --state: rgb(255 255 255 / 0.06);
+    --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.28), 0 16px 40px rgb(0 0 0 / 0.32);
+    --shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.3), 0 32px 80px rgb(0 0 0 / 0.45);
+    --shadow-composer: 0 4px 24px rgb(0 0 0 / 0.32);
+    --scrim: rgb(8 8 9 / 0.62);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #171E16;
-  --surface: #20291E;
-  --raised: #283225;
-  --sunken: #1A2218;
-  --rail-bg: #1C251A;
-  --glass: rgb(40 50 37 / 0.9);
-  --glass-edge: rgb(172 194 153 / 0.13);
-  --line: #35422F;
-  --line-strong: #809375;
-  --text: #EEF3E8;
-  --text-2: #BFCCB5;
-  --text-3: #A3B499;
+  --bg: #141415;
+  --surface: #1C1C1E;
+  --raised: #232325;
+  --sunken: #18181A;
+  --rail-bg: #18181A;
+  --glass: rgb(38 38 41 / 0.66);
+  --glass-edge: rgb(255 255 255 / 0.09);
+  --line: #2C2C30;
+  --line-strong: #6B6C73;
+  --text: #ECECEE;
+  --text-2: #B9BAC0;
+  --text-3: #9C9DA4;
   --brand-hover: #A3B784;
   --brand-ink: #141A0C;
   --brand-strong: #A2BC80;
   --brand-text: #B4CE93;
-  --brand-soft: #35452A;
+  --brand-soft: #2B3424;
   --brand-soft-text: #D6E8BF;
-  --ember-ink: #141A0C;
+  --ember-ink: #141415;
   --ember-text: #EDB16E;
-  --ember-soft: #3A2A18;
+  --ember-soft: #3A2C1C;
   --danger: #F2A08F;
-  --danger-ink: #171E16;
+  --danger-ink: #141415;
   --danger-text: #F2A08F;
-  --danger-soft: #402820;
+  --danger-soft: #3D2622;
   --focus: #B4CE93;
-  --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.2), 0 16px 40px rgb(0 0 0 / 0.25);
-  --shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.2), 0 32px 80px rgb(0 0 0 / 0.4);
-  --shadow-composer: 0 4px 24px rgb(0 0 0 / 0.18);
-  --scrim: rgb(6 12 5 / 0.7);
+  --state: rgb(255 255 255 / 0.06);
+  --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.28), 0 16px 40px rgb(0 0 0 / 0.32);
+  --shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.3), 0 32px 80px rgb(0 0 0 / 0.45);
+  --shadow-composer: 0 4px 24px rgb(0 0 0 / 0.32);
+  --scrim: rgb(8 8 9 / 0.62);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --t-fast: 0ms; --t-base: 0ms; }
+  :root { --t-fast: 0ms; --t-base: 0ms; --t-slow: 0ms; }
 }

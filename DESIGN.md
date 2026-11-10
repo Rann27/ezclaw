@@ -16,7 +16,7 @@ Scope correction: visual redesign only. Preserve the original workflow, field av
 | Canvas | `#EAF0E7` surrounds an inset workspace, separating navigation from the task without a heavy divider. |
 | Surfaces | `#F3F6F0` for quiet panels; `#FFFFFF` for the main work surface. Sage-tinted neutrals make the workspace belong to the brand. |
 | Ink | `#20291E` primary and `#4F5D48` secondary provide readable green-toned contrast. |
-| Dark | Forest surfaces maintain the same depth hierarchy and green identity. Light, dark, and system preferences remain available. |
+| Dark | Neutral graphite (`#141415` canvas, `#1C1C1E` panels, `#232325` work surface), owner's request 2026-11-10: the forest tint read as muddy. Sage stays only on actions and selection, so the brand reads as an accent, not a cast. Light, dark, and system preferences remain available. |
 | Type | Locally bundled Atkinson Hyperlegible Next improves recognition of similar letters in model names; its mono sibling is reserved for code, paths, and parameters. No remote fonts. |
 | Scale | UI 14px, reading 15px/1.6, page titles 20-24px, welcome headlines 22px. Text stays readable while more content fits on screen. |
 | Space | 4px base, 6-8px control gaps, 12-16px section gaps, and 12px welcome padding. Compact grouping replaces large empty margins. |
@@ -24,9 +24,9 @@ Scope correction: visual redesign only. Preserve the original workflow, field av
 | Desktop density | 30px controls, 208px permanent rail, 264px inspector, 44px header. Desktop pointer controls reserve more room for work. |
 | Content width | Work surfaces and composers use available width up to 1120px; prose stays at 78ch. Settings and Library use a 1280px container with 24px gutters. |
 | Elevation | Composer, popovers, and dialogs get shadows because they sit above content. Static lists and inspector sections stay flat. |
-| Glass | Only the thread header and current composer use backdrop blur, with opaque fallbacks. They frame scrollable work and remain legible. Sidebar, inspector, cards, and dialogs are solid. |
+| Glass | Everything that floats over the work is glass: thread header and composer (the conversation scrolls under them), dialogs and menus. Owner kept this over antislop R-10's 1-2 element cap (2026-11-10). Rail, inspector, lists, and cards stay solid so long text keeps a calm ground. Opaque fallbacks without backdrop-filter. |
 | Icons | Existing Phosphor glyphs describe actual actions: conversation, folder, image, brush, search. Filled glyphs indicate selection. No new logo or generated assets. |
-| Motion | CSS transform/opacity transitions, 140ms press feedback and 220ms panel/dialog transitions, explain response and depth. Reduced motion removes movement. No animation package or decorative loops. |
+| Motion | Material emphasized easing, 180ms state changes, 300ms panels and dialogs: long enough to be seen. Section changes rise in, new messages and threads rise once, the composer lifts while focused, dialogs scale in over a blurred scrim, controls show a Material state layer on hover and press, theme switches fade. Reduced motion removes movement. No animation package and no loops. |
 
 ## Composition
 

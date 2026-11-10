@@ -81,7 +81,7 @@ export function Menu({ label, items, trigger, className = "" }: { label: string;
             role="menu"
             aria-label={label}
             tabIndex={-1}
-            className="fixed z-50 grid w-52 gap-px rounded-md border border-line bg-raised py-1 shadow-popover focus:outline-none"
+            className="fixed z-50 grid w-52 gap-px glass-strong rounded-md border py-1 shadow-popover focus:outline-none"
             style={{ top: pos.top, left: pos.left }}
             onKeyDown={(e) => {
               const at = enabled.indexOf(active);

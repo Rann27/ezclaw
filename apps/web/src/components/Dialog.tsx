@@ -40,7 +40,7 @@ export function Dialog({ open, onClose, title, children, width = "max-w-lg", foo
         // A click on the backdrop lands on the dialog element itself.
         if (e.target === ref.current) onClose();
       }}
-      className={`ez-dialog ${motion ? "ez-dialog-motion" : ""} m-auto w-[calc(100vw-2rem)] ${width} rounded-lg bg-raised p-0 text-fg shadow-modal backdrop:bg-scrim`}
+      className={`ez-dialog ${motion ? "ez-dialog-motion" : ""} m-auto w-[calc(100vw-2rem)] ${width} glass-strong rounded-lg p-0 text-fg shadow-modal backdrop:bg-scrim`}
     >
       {open && (
         <div className="flex max-h-[85dvh] flex-col">
