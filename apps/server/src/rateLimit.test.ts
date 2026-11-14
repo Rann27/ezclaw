@@ -101,6 +101,19 @@ describe("429 handling in model calls", () => {
     expect(JSON.stringify(answer)).toContain("sedang bermasalah (520)");
   });
 
+  it("sends the same request again when the provider says nothing before any answer arrives", async () => {
+    process.env.EZCLAW_IDLE_TIMEOUT_MS = "400";
+    try {
+      const { answer, calls } = await chatWith("silent-once");
+      expect(answer.status).toBe("complete");
+      expect(calls).toHaveLength(2);
+      expect(calls[1]!.raw).toBe(calls[0]!.raw);
+      expect(JSON.stringify(answer)).toContain("tidak menjawab selama");
+    } finally {
+      delete process.env.EZCLAW_IDLE_TIMEOUT_MS;
+    }
+  }, 30_000);
+
   it("gives up on a server error after the retries, with a short message instead of the HTML page", async () => {
     const { answer, calls } = await chatWith("down-503");
     expect(answer.status).toBe("error");

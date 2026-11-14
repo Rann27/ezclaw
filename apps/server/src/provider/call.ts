@@ -24,6 +24,8 @@ import { isQuotaError, rateLimiter, retryAfterMs, sleep } from "./rateLimit.js";
 import { parseResponsesStream } from "./responsesStream.js";
 
 const IDLE_TIMEOUT_MS = 180_000;
+/** Tests shorten the silence a call waits out. */
+const idleTimeoutMs = () => Number(process.env.EZCLAW_IDLE_TIMEOUT_MS) || IDLE_TIMEOUT_MS;
 const MAX_LOGGED_RESPONSE = 8000;
 const RETRYABLE_STATUS = new Set([400, 422]);
 /** Waits before each retry of a 429 that names no wait of its own; also the retry budget. */
@@ -178,7 +180,7 @@ export async function callModel(deps: ModelCallDeps, args: ModelCallArgs, acc: T
     let idleTimer: NodeJS.Timeout | undefined;
     const armIdle = () => {
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => idle.abort(), IDLE_TIMEOUT_MS);
+      idleTimer = setTimeout(() => idle.abort(), idleTimeoutMs());
     };
     const signal = AbortSignal.any([args.signal, idle.signal]);
 
@@ -189,7 +191,7 @@ export async function callModel(deps: ModelCallDeps, args: ModelCallArgs, acc: T
         res = await fetchImpl(url, { method: "POST", headers, body: bodyText, signal });
       } catch (err) {
         if (args.signal.aborted) throw err;
-        if (idle.signal.aborted) throw new ProviderError(`Tidak ada respons dari ${endpoint.name} selama ${IDLE_TIMEOUT_MS / 1000} detik.`, { network: true });
+        if (idle.signal.aborted) throw new ProviderError(`Tidak ada respons dari ${endpoint.name} selama ${Math.round(idleTimeoutMs() / 1000)} detik.`, { network: true });
         const nerr = networkError(conn, err);
         // A local server that is not running will not start by waiting.
         if (!conn.isLocal && !/^https?:\/\/(localhost|127\.|\[::1\])/i.test(endpoint.baseUrl)) {
@@ -257,7 +259,15 @@ export async function callModel(deps: ModelCallDeps, args: ModelCallArgs, acc: T
       else if (idle.signal.aborted) logDone({ error: `Tidak ada data dari ${endpoint.name}.` });
       else logDone({ error: err instanceof Error ? err.message : String(err) });
       if (idle.signal.aborted && !args.signal.aborted) {
-        throw new ProviderError(`Koneksi ke ${endpoint.name} berhenti mengirim data selama ${IDLE_TIMEOUT_MS / 1000} detik.`, { network: true });
+        // A provider that went quiet before any answer or tool call arrived (sometimes it never sends
+        // headers): nothing usable is lost, so the same request goes out again after a wait.
+        if (!acc.text.length && !acc.toolCalls.length) {
+          acc.reasoning = [];
+          acc.signature = undefined;
+          acc.raw = undefined;
+          if (await backOff(`${endpoint.name} tidak menjawab selama ${Math.round(idleTimeoutMs() / 1000)} detik.`)) continue;
+        }
+        throw new ProviderError(`Koneksi ke ${endpoint.name} berhenti mengirim data selama ${Math.round(idleTimeoutMs() / 1000)} detik.`, { network: true });
       }
       throw err;
     } finally {

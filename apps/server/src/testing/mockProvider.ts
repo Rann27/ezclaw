@@ -165,6 +165,8 @@ export async function startMockProvider(port = 0): Promise<MockProvider> {
         res.writeHead(520, { "content-type": "text/html", "retry-after": "1" });
         return res.end('<!DOCTYPE html><html lang="en-US"><head><title>example.ai | 520: Web server is returning an unknown error</title></head><body><div id="cf-wrapper">Error code 520</div></body></html>');
       }
+      // Says nothing at all on every other request (not even headers), answered normally in between.
+      if (model === "silent-once" && requests.filter((r) => r.body?.model === "silent-once").length % 2 === 1) return;
       if (model === "down-503") {
         res.writeHead(503, { "content-type": "text/html", "retry-after": "0" });
         return res.end("<html><head><title>503 Service Unavailable</title></head><body>down</body></html>");
