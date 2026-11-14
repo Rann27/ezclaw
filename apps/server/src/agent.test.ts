@@ -513,3 +513,21 @@ describe("request log", () => {
   });
 });
 
+
+describe("run status in the thread list", () => {
+  it("marks a thread as working, then waiting on an approval, and clears it when the run ends", async () => {
+    type L = { threads: { id: string; run: string | null }[] };
+    const { model, thread } = await setup("agent-edit");
+    const runOf = async () => (await ctx.json<L>("/api/threads?mode=agent")).threads.find((t) => t.id === thread.id)?.run;
+    expect(await runOf()).toBeNull();
+
+    const sent = await send(thread.id, model.id, "ubah foo jadi bar");
+    expect(["working", "waiting"]).toContain(await runOf());
+    const request = (await waitFor(sent.runId, (e) => e.type === "approval")) as Extract<RunEvent, { type: "approval" }>;
+    expect(await runOf()).toBe("waiting");
+
+    await approve(sent.runId, request.approvalId, "allow");
+    await collectRun(ctx, sent.runId);
+    expect(await runOf()).toBeNull();
+  });
+});

@@ -76,7 +76,7 @@ export class ChatService {
       .where(and(eq(threads.mode, mode), archived ? isNotNull(threads.archivedAt) : isNull(threads.archivedAt)))
       .orderBy(desc(threads.pinned), desc(archived ? threads.archivedAt : threads.updatedAt))
       .all()
-      .map((r) => ({ id: r.id, mode: r.mode, title: r.title, pinned: r.pinned, group: r.groupName, archived: r.archivedAt !== null, updatedAt: r.updatedAt.toISOString() }));
+      .map((r) => ({ id: r.id, mode: r.mode, title: r.title, pinned: r.pinned, group: r.groupName, archived: r.archivedAt !== null, updatedAt: r.updatedAt.toISOString(), run: this.runs.statusForThread(r.id) }));
   }
 
   /** Titles and message text containing `q`, newest first. Plain substring match, case-insensitive. */

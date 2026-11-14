@@ -102,6 +102,14 @@ export class RunManager {
     return run && !run.done ? { runId: run.id, messageId: run.messageId } : null;
   }
 
+  /** For the sidebar: working, waiting on the owner (an approval or a question), or idle (null). */
+  statusForThread(threadId: string): "working" | "waiting" | null {
+    const id = this.byThread.get(threadId);
+    const run = id ? this.runs.get(id) : undefined;
+    if (!run || run.done) return null;
+    return run.pendings.size > 0 ? "waiting" : "working";
+  }
+
   private create(threadId: string, messageId: string, kind: ActiveRun["kind"] = "chat"): ActiveRun {
     const run: ActiveRun = {
       id: randomUUID(),

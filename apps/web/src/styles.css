@@ -171,8 +171,16 @@
   100% { transform: translateY(0); }
 }
 
+/* Sidebar: a run in another thread fills a few times when it shows up, then rests half full, so a
+   long run does not blink for hours and does not look finished. */
+.thread-item .node-run::after {
+  transform: translateY(50%);
+  animation: node-fill 1.4s var(--ease) 3;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .node-run::after {
+  .node-run::after,
+  .thread-item .node-run::after {
     animation: none;
     transform: translateY(50%);
   }

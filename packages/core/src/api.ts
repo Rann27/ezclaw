@@ -76,6 +76,8 @@ export interface ThreadSummary {
   group: string | null;
   archived: boolean;
   updatedAt: string;
+  /** A run in progress: "waiting" when it needs the owner (an approval or a question). */
+  run: "working" | "waiting" | null;
 }
 
 export interface SearchHit {

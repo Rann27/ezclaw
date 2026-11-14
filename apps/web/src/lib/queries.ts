@@ -48,7 +48,13 @@ export const useModels = () => useQuery({ queryKey: keys.models, queryFn: () => 
 export const useModelProfile = (id: string | null) =>
   useQuery({ queryKey: keys.profile(id ?? ""), queryFn: () => api<ModelProfileResponse>(`/models/${id}/profile`), enabled: !!id });
 export const useThreadList = (mode: string) =>
-  useQuery({ queryKey: keys.threads(mode), queryFn: () => api<ThreadListResponse>(`/threads?mode=${mode}`) });
+  useQuery({
+    queryKey: keys.threads(mode),
+    queryFn: () => api<ThreadListResponse>(`/threads?mode=${mode}`),
+    // While some thread works, the list is checked now and then so its marker clears or turns to
+    // "waiting" even when nobody is looking at that thread.
+    refetchInterval: (q) => (q.state.data?.threads.some((t) => t.run) ? 4000 : false),
+  });
 export const useThread = (id: string | undefined) =>
   useQuery({ queryKey: keys.thread(id ?? ""), queryFn: () => api<ThreadDetailDto>(`/threads/${id}`), enabled: !!id });
 export const useRequestLogs = (messageId: string | null) =>

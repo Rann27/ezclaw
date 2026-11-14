@@ -223,6 +223,14 @@ function ThreadItem({ thread: t, current, base, mode, onMove, onDelete }: { thre
           current ? "bg-sunken text-fg" : t.archived ? "text-fg-3 hover:bg-sunken" : "text-fg-2 hover:bg-sunken hover:text-fg",
         ].join(" ")}
       >
+        {t.run && (
+          <span
+            role="img"
+            className={`node ${t.run === "waiting" ? "node-wait" : "node-run"}`}
+            aria-label={t.run === "waiting" ? "Menunggu keputusanmu" : "Sedang berjalan"}
+            title={t.run === "waiting" ? "Menunggu keputusanmu" : "Sedang berjalan"}
+          />
+        )}
         {t.pinned && <PushPinIcon size={12} weight="fill" aria-label="Disematkan" className="shrink-0 text-brand-text" />}
         <span className="min-w-0 truncate">{t.title}</span>
       </Link>
