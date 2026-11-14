@@ -222,6 +222,36 @@ describe("messages during a run", () => {
     expect(last.parts.find((p) => p.type === "text")).toMatchObject({ text: "Diterima: ini pesan tambahan" });
   });
 
+  it("a model marked autoContinue is told to carry on while its plan has open steps", async () => {
+    const m = await model("agent-early-stop", { tools: true, autoContinue: true });
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "agent", workspace: ws, modelId: m.id, approvalMode: "full", confirmFull: true }));
+    const res = await ctx.json<SendMessageResponse>(`/api/threads/${t.id}/messages`, post({ text: "mulai", modelId: m.id }));
+    const events = await collectRun(ctx, res.runId);
+    expect(events.filter((e) => e.type === "note" && e.text.startsWith("Lanjut otomatis"))).toHaveLength(1);
+    const texts = (await ctx.json<ThreadDetailDto>(`/api/threads/${t.id}`)).messages.flatMap((x) => x.parts.filter((p) => p.type === "text").map((p) => (p as { text: string }).text));
+    expect(texts).toContain("Bab 1 selesai.");
+    expect(texts).toContain("Bab 2 selesai.");
+  });
+
+  it("auto-continue gives up when steps stop getting done", async () => {
+    const m = await model("agent-lazy", { tools: true, autoContinue: true });
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "agent", workspace: ws, modelId: m.id, approvalMode: "full", confirmFull: true }));
+    const res = await ctx.json<SendMessageResponse>(`/api/threads/${t.id}/messages`, post({ text: "mulai", modelId: m.id }));
+    const events = await collectRun(ctx, res.runId);
+    expect(events.filter((e) => e.type === "note" && e.text.startsWith("Lanjut otomatis"))).toHaveLength(3);
+    expect(events.find((e) => e.type === "done")).toMatchObject({ status: "complete" });
+  });
+
+  it("other models are not told to carry on, even with open plan steps", async () => {
+    const m = await model("agent-early-stop", { tools: true });
+    const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "agent", workspace: ws, modelId: m.id, approvalMode: "full", confirmFull: true }));
+    const res = await ctx.json<SendMessageResponse>(`/api/threads/${t.id}/messages`, post({ text: "mulai", modelId: m.id }));
+    const events = await collectRun(ctx, res.runId);
+    expect(events.some((e) => e.type === "note" && e.text.startsWith("Lanjut otomatis"))).toBe(false);
+    const texts = (await ctx.json<ThreadDetailDto>(`/api/threads/${t.id}`)).messages.flatMap((x) => x.parts.filter((p) => p.type === "text").map((p) => (p as { text: string }).text));
+    expect(texts).not.toContain("Bab 2 selesai.");
+  });
+
   it("Agent reads attachments: documents as text, images as images", async () => {
     const m = await model("echo", { tools: true, inputModalities: ["text", "image"] });
     const t = await ctx.json<ThreadDetailDto>("/api/threads", post({ mode: "agent", workspace: ws, modelId: m.id }));

@@ -96,6 +96,10 @@ const RESERVED_FOR_REPLY = 0.1;
 const MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024;
 /** Only the most recent images are sent again; older ones would mostly cost tokens. */
 const MAX_IMAGES_IN_CONTEXT = 4;
+/** Automatic "carry on" messages in a row with no tool call between them; then the run ends as usual. */
+const MAX_NUDGES_IN_A_ROW = 2;
+/** Automatic "carry on" messages with no plan step completed between them; a model busy without progress stops here. */
+const MAX_STALLED_NUDGES = 3;
 
 /** Fills in the bytes of the last few images in the history and drops older ones. */
 export function withImageData(history: CanonicalMessage[], assets: AssetService, modelSeesImages = true): CanonicalMessage[] {
@@ -306,10 +310,18 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
     run.emit({ type: "note", text: "Profil model ini belum menyatakan dukungan tools. Agent tetap mencoba; jika provider menolak, atur lewat Profil model." });
   }
 
+  /** The plan as the model last set it, kept here so the run can see whether steps are still open. */
+  let plan: PlanItem[] = db.select({ plan: threads.plan }).from(threads).where(eq(threads.id, input.threadId)).get()?.plan ?? [];
   const setPlan = (items: PlanItem[]) => {
+    plan = items;
     db.update(threads).set({ plan: items }).where(eq(threads.id, input.threadId)).run();
     run.emit({ type: "plan", items });
   };
+  /** Automatic continue messages since the model last called a tool. */
+  let nudgesInARow = 0;
+  /** Automatic continue messages since a plan step was last completed, and the completed count at the last one. */
+  let stalledNudges = 0;
+  let completedAtNudge = -1;
 
   let lastUsage: Usage | null = null;
   let sinceLastCall = 0;
@@ -437,8 +449,26 @@ export async function runAgent(deps: AgentDeps, run: RunHandle, input: AgentRunI
       if (acc.finish === "length" && !text) return { status: "error", error: "Jawaban terpotong sebelum model sempat menulis apa pun. Naikkan max_output_tokens di panel parameter.", finishReason };
       // A message that arrived while the model was answering gets an answer of its own.
       if (deliverInbox()) continue;
+      // Models marked autoContinue stop to report after every step; the plan they wrote says the work is not done.
+      const open = plan.filter((p) => p.status !== "completed");
+      const completed = plan.length - open.length;
+      // A step finished since the last nudge is progress; nudges without any stop after a few.
+      if (completed > completedAtNudge) stalledNudges = 0;
+      if (!isChat && modelProfile.autoContinue && open.length && nudgesInARow < MAX_NUDGES_IN_A_ROW && stalledNudges < MAX_STALLED_NUDGES && acc.finish !== "length") {
+        nudgesInARow++;
+        stalledNudges++;
+        completedAtNudge = completed;
+        const more = open.length > 1 ? ` and ${open.length - 1} more` : "";
+        const nudge = `[EZClaw: continue automatically] Your plan still has open steps: "${open[0]!.text}"${more}. Carry on with the next step now, without stopping to report progress. End your turn only when every step is completed, or when you need a decision only the owner can make.`;
+        const m = insertMessage(db, { threadId: input.threadId, role: "user", parts: [{ type: "text", text: nudge }], status: "complete" });
+        run.emit({ type: "user_message", messageId: m.id, text: nudge });
+        run.emit({ type: "note", text: `Lanjut otomatis: rencana masih punya ${open.length} langkah terbuka.` });
+        sinceLastCall += estimateTokens(nudge);
+        continue;
+      }
       return { status: "complete", finishReason };
     }
+    nudgesInARow = 0;
 
     /* ---- run the tools it asked for */
     for (const c of calls) run.emit({ type: "tool_call", callId: c.callId, name: c.name, args: c.args, ...(c.argsError ? { argsError: c.argsError } : {}) });

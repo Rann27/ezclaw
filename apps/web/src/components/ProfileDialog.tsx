@@ -41,6 +41,7 @@ function rows(data: ModelProfileResponse): { label: string; value: string; layer
     { label: "Reasoning: effort", value: fmt(p.reasoning.efforts), layer: layer("reasoning.efforts") },
     { label: "Dikunci saat reasoning", value: fmt(p.reasoning.lockedWhileActive), layer: layer("reasoning.lockedWhileActive") },
     { label: "Riwayat reasoning", value: p.reasoningReplay, layer: layer("reasoningReplay") },
+    { label: "Lanjut otomatis (Agent)", value: fmt(p.autoContinue), layer: layer("autoContinue") },
   ];
   for (const [param, spec] of Object.entries(p.sampling)) {
     out.push({ label: param, value: `${spec.min} sampai ${spec.max}${spec.default !== undefined ? `, bawaan ${spec.default}` : ""}`, layer: layer(`sampling.${param}`) });

@@ -23,6 +23,17 @@ type Script = (ctx: ScriptContext) => Action[];
 const done = (text: string): Action[] => [{ text }];
 
 export const SCRIPTS: Record<string, Script> = {
+  // Plans two chapters, stops after the first; told to carry on, finishes the second.
+  "agent-early-stop": ({ step, userText }) =>
+    userText.includes("continue automatically")
+      ? step === 0
+        ? [{ tool: "update_plan", args: { plan: [{ step: "Bab 1", status: "completed" }, { step: "Bab 2", status: "completed" }] } }]
+        : done("Bab 2 selesai.")
+      : step === 0
+        ? [{ tool: "update_plan", args: { plan: [{ step: "Bab 1", status: "completed" }, { step: "Bab 2", status: "pending" }] } }]
+        : done("Bab 1 selesai."),
+  // Leaves a step open and never does anything more, however often it is told to carry on.
+  "agent-lazy": ({ step }) => (step === 0 ? [{ tool: "update_plan", args: { plan: [{ step: "Bab 1", status: "pending" }] } }] : done("Saya berhenti di sini.")),
   "agent-read": ({ step, lastResult }) => (step === 0 ? [{ tool: "read_file", args: { path: "hello.txt" } }] : done(`Isi file: ${lastResult ?? "?"}`)),
   "agent-edit": ({ step }) => (step === 0 ? [{ tool: "edit_file", args: { path: "a.txt", old_string: "foo", new_string: "bar" } }] : done("Perubahan selesai.")),
   "agent-write": ({ step }) => (step === 0 ? [{ tool: "write_file", args: { path: "baru/catatan.txt", content: "halo dunia\n" } }] : done("File dibuat.")),

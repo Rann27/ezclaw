@@ -56,6 +56,7 @@ Bagian 1 sampai 5 sama dari request ke request, jadi provider yang meng-cache aw
 ## Pengaman run panjang
 
 - **Batas biaya per run** (aturan loop profil, bawaan mati): run berhenti sebelum langkah berikutnya begitu biaya yang dilaporkan provider mencapai batas. Hanya berlaku untuk provider yang melaporkan biaya per request (Experiential Labs, OpenRouter). Kalau provider tidak melaporkannya, run memberi catatan sekali dan batas tidak dijaga.
+- **Lanjut otomatis** (per model, bawaan mati; menyala hanya untuk GPT-6.1 Terra lewat ChatGPT langganan): saat model mengakhiri gilirannya padahal rencana `update_plan`-nya masih punya langkah terbuka, EZClaw mengirim pesan "[EZClaw: continue automatically]" dan run berlanjut. Berhenti setelah 2 giliran berturut-turut tanpa tool, atau 3 pesan tanpa ada langkah yang selesai. Bisa dinyalakan untuk model lain lewat override Profil model: `{"autoContinue": true}`.
 - **Gangguan server dicoba ulang**: balasan 500, 502, 503, 504, 520–524, dan 529, juga koneksi yang gagal sebelum ada data, dikirim ulang dengan request yang sama setelah 5, 15, 30, lalu 60 detik (atau selama `Retry-After`). Error di tengah streaming tidak diulang, supaya jawaban tidak dobel. Server lokal yang mati tidak ditunggu.
 - Halaman error HTML dari CDN diringkas menjadi judulnya, misalnya "520: Web server is returning an unknown error (halaman error HTML)".
 

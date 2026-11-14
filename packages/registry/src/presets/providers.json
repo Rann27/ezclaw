@@ -304,6 +304,16 @@
           "Lewat plan ChatGPT: request dikirim dengan store false dan tanpa parameter sampling. Reasoning effort belum terverifikasi di dokumentasi; bila ditolak, EZClaw mengirim ulang tanpanya."
         ]
       }
+    },
+    {
+      "endpoint": "chatgpt",
+      "model": "terra",
+      "patch": {
+        "autoContinue": true,
+        "notes": [
+          "GPT-6.1 Terra lewat plan ChatGPT cenderung berhenti untuk melapor setelah tiap bab. Di Agent, EZClaw menyuruhnya lanjut selama rencananya masih punya langkah terbuka."
+        ]
+      }
     }
   ]
 }

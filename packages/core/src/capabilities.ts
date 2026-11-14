@@ -155,6 +155,11 @@ export const capabilityProfileSchema = z.object({
    * for Claude models). Cached input is billed at a fraction of the normal price on later requests.
    */
   promptCache: z.boolean().default(false),
+  /**
+   * Agent only: when the model ends its turn while its own plan still has open steps, EZClaw tells it
+   * to carry on instead of ending the run. For models that stop to report after every step.
+   */
+  autoContinue: z.boolean().default(false),
   /** Fields always sent for this model unless a param or the extra body overrides them (e.g. MiniMax reasoning_split). */
   bodyDefaults: z.record(z.string(), z.unknown()),
   notes: z.array(z.string()),
