@@ -58,6 +58,92 @@
       }
     },
     {
+      "endpoint": "xai",
+      "model": "imagine-video",
+      "patch": {
+        "tools": false,
+        "stop": false,
+        "inputModalities": [
+          "text",
+          "image"
+        ],
+        "outputModalities": [
+          "video"
+        ],
+        "reasoning": {
+          "style": "none"
+        },
+        "video": {
+          "wire": "xai-videos",
+          "durations": [],
+          "durationRange": {
+            "min": 1,
+            "max": 15
+          },
+          "defaultDuration": 8,
+          "aspectRatios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3",
+            "21:9"
+          ],
+          "textToVideo": true,
+          "startFrame": true,
+          "endFrame": false,
+          "audio": "optional",
+          "negativePrompt": false,
+          "seed": false,
+          "resolutions": [
+            "480p",
+            "720p"
+          ]
+        },
+        "notes": [
+          "Video Grok Imagine: 1 sampai 15 detik, suara aktif kecuali dimatikan. Dengan frame awal, aspect ratio mengikuti gambarnya."
+        ]
+      }
+    },
+    {
+      "endpoint": "xai",
+      "model": "imagine-video-1\\.5",
+      "patch": {
+        "video": {
+          "wire": "xai-videos",
+          "durations": [],
+          "durationRange": {
+            "min": 1,
+            "max": 15
+          },
+          "defaultDuration": 8,
+          "aspectRatios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3",
+            "21:9"
+          ],
+          "textToVideo": true,
+          "startFrame": true,
+          "endFrame": false,
+          "audio": "optional",
+          "negativePrompt": false,
+          "seed": false,
+          "resolutions": [
+            "480p",
+            "720p",
+            "1080p"
+          ]
+        }
+      }
+    },
+    {
       "endpoint": "qwen",
       "model": "^(qwen|qwq)",
       "patch": {

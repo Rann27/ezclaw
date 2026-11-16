@@ -7,7 +7,7 @@ export const TOKEN_META = "ezclaw-session";
 /** Placeholder in the built index.html that the server replaces with the token. */
 export const TOKEN_PLACEHOLDER = "__EZCLAW_SESSION__";
 
-export const MODES = ["chat", "agent", "image", "edit"] as const;
+export const MODES = ["chat", "agent", "image", "edit", "video"] as const;
 export const modeSchema = z.enum(MODES);
 export type Mode = z.infer<typeof modeSchema>;
 
@@ -15,7 +15,7 @@ export const THEMES = ["system", "light", "dark"] as const;
 export const themeSchema = z.enum(THEMES);
 export type ThemePreference = z.infer<typeof themeSchema>;
 
-export const MODEL_ROLES = ["chat", "agent", "image", "edit", "composer", "title", "vision"] as const;
+export const MODEL_ROLES = ["chat", "agent", "image", "edit", "video", "composer", "title", "vision"] as const;
 export const modelRoleSchema = z.enum(MODEL_ROLES);
 export type ModelRole = z.infer<typeof modelRoleSchema>;
 
@@ -24,6 +24,7 @@ export const MODEL_ROLE_LABELS: Record<ModelRole, string> = {
   agent: "Agent",
   image: "Generate gambar",
   edit: "Edit gambar",
+  video: "Generate video",
   composer: "Prompt Composer",
   title: "Judul dan ringkasan",
   vision: "Cadangan vision",
@@ -82,7 +83,7 @@ export interface ThreadSummary {
 
 export interface SearchHit {
   threadId: string;
-  mode: "chat" | "agent" | "image" | "edit";
+  mode: "chat" | "agent" | "image" | "edit" | "video";
   title: string;
   /** Where the words were found. */
   in: "title" | "message";

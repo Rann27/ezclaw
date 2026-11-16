@@ -5,6 +5,7 @@ import {
   type ApprovalMode,
   type HarnessProfile,
   type ImageTurnMeta,
+  type VideoTurnMeta,
   type MessageDto,
   type SendMessageInput,
   type SendMessageResponse,
@@ -60,13 +61,23 @@ export class ChatService {
   }
 
   /** Startup housekeeping: answers cut off by a restart, and old request logs. */
-  recover() {
-    this.db
-      .update(messages)
-      .set({ status: "error", error: "EZClaw dimatikan atau dimulai ulang saat jawaban ini masih berjalan." })
-      .where(eq(messages.status, "streaming"))
-      .run();
+  /**
+   * Answers cut off by a restart become errors, except video jobs already accepted by the provider:
+   * those are returned so their runs can keep waiting for the same (paid) job.
+   */
+  recover(): { threadId: string; messageId: string; modelRowId: string; meta: VideoTurnMeta }[] {
+    const resumable: { threadId: string; messageId: string; modelRowId: string; meta: VideoTurnMeta }[] = [];
+    for (const m of this.db.select().from(messages).where(eq(messages.status, "streaming")).all()) {
+      const meta = m.raw?.protocol === "video" ? (m.raw.data as VideoTurnMeta) : null;
+      const modelRowId = meta?.modelRowId ?? this.db.select({ id: threads.modelRowId }).from(threads).where(eq(threads.id, m.threadId)).get()?.id ?? null;
+      if (meta?.job && modelRowId && this.db.select({ id: models.id }).from(models).where(eq(models.id, modelRowId)).get()) {
+        resumable.push({ threadId: m.threadId, messageId: m.id, modelRowId, meta });
+        continue;
+      }
+      this.db.update(messages).set({ status: "error", error: "EZClaw dimatikan atau dimulai ulang saat jawaban ini masih berjalan." }).where(eq(messages.id, m.id)).run();
+    }
     this.db.delete(requestLogs).where(lt(requestLogs.startedAt, new Date(Date.now() - LOG_RETENTION_MS))).run();
+    return resumable;
   }
 
   list(mode: ThreadRow["mode"], archived = false): ThreadSummary[] {
@@ -147,7 +158,7 @@ export class ChatService {
     return { on: h.on, profileId: h.profileId, tools: h.tools.filter((t) => known.has(t)) };
   }
 
-  create(input: { mode: "chat" | "agent" | "image" | "edit"; modelId?: string; defaultModelId?: string; workspace?: string; approvalMode?: ApprovalMode; confirmFull?: boolean; harness?: ThreadHarness }): ThreadDetailDto {
+  create(input: { mode: "chat" | "agent" | "image" | "edit" | "video"; modelId?: string; defaultModelId?: string; workspace?: string; approvalMode?: ApprovalMode; confirmFull?: boolean; harness?: ThreadHarness }): ThreadDetailDto {
     const modelId = input.modelId ?? input.defaultModelId ?? null;
     this.checkModel(modelId);
     let workspace: string | null = null;
@@ -180,6 +191,7 @@ export class ChatService {
       systemPrompt: row.systemPrompt,
       params: row.params,
       imageParams: row.imageParams,
+      videoParams: row.videoParams,
       workspace: row.workspace,
       approvalMode: row.approvalMode,
       harness: row.harness,
@@ -201,6 +213,7 @@ export class ChatService {
     if (patch.systemPrompt !== undefined) set.systemPrompt = patch.systemPrompt;
     if (patch.params !== undefined) set.params = patch.params;
     if (patch.imageParams !== undefined) set.imageParams = patch.imageParams;
+    if (patch.videoParams !== undefined) set.videoParams = patch.videoParams;
     if (patch.modelId !== undefined) {
       this.checkModel(patch.modelId);
       set.modelRowId = patch.modelId;
@@ -407,6 +420,7 @@ export function toMessageDto(m: MessageRow): MessageDto {
     modelLabel: m.modelLabel,
     durationMs: m.durationMs,
     image: m.raw?.protocol === "image" ? (m.raw.data as ImageTurnMeta) : null,
+    video: m.raw?.protocol === "video" ? (m.raw.data as VideoTurnMeta) : null,
     createdAt: m.createdAt.toISOString(),
   };
 }

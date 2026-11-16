@@ -102,7 +102,7 @@ interface PickerProps {
   selectedId: string | null;
   onSelect: (model: ModelDto) => void;
   /** Which kind of model the caller needs. */
-  kind?: "text" | "image";
+  kind?: "text" | "image" | "video";
   /** Narrows the list further, e.g. Edit shows only models that take an input image. */
   accept?: (m: ModelDto) => boolean;
 }

@@ -7,6 +7,7 @@ import type { Db } from "../db/client.js";
 import { assets } from "../db/schema.js";
 import { HttpError } from "../errors.js";
 import { sniffImage } from "./imageInfo.js";
+import { MAX_VIDEO_BYTES, sniffVideo } from "../provider/video.js";
 
 type AssetRow = typeof assets.$inferSelect;
 
@@ -46,6 +47,19 @@ export class AssetService {
     return toAssetDto(this.row(id));
   }
 
+  /** Stores a video made by a video model. */
+  saveVideo(bytes: Buffer): AssetDto {
+    if (bytes.length > MAX_VIDEO_BYTES) throw new HttpError(413, "file_too_large", `Video lebih besar dari ${MAX_VIDEO_BYTES / 1024 / 1024} MB.`);
+    const info = sniffVideo(bytes);
+    if (!info) throw new HttpError(400, "not_a_video", "Data ini bukan video MP4, MOV, atau WebM.");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const id = randomUUID();
+    const file = `${id}.${info.ext}`;
+    writeFileSync(join(this.dir, file), bytes);
+    this.db.insert(assets).values({ id, kind: "generated", mime: info.mime, bytes: bytes.length, width: null, height: null, sha256, file, createdAt: new Date() }).run();
+    return toAssetDto(this.row(id));
+  }
+
   /** Stores a non-image file attached to a chat message. The type is decided by the caller from its content. */
   saveAttachment(bytes: Buffer, name: string, mime: string, ext: string): AssetDto {
     if (bytes.length === 0) throw new HttpError(400, "empty_file", "File kosong.");
@@ -75,6 +89,12 @@ export class AssetService {
 
   dto(id: string): AssetDto {
     return toAssetDto(this.row(id));
+  }
+
+  /** Where an asset's file is, for serving big files (videos) in pieces. */
+  locate(id: string): { path: string; mime: string; file: string; size: number } {
+    const row = this.row(id);
+    return { path: join(this.dir, row.file), mime: row.mime, file: row.file, size: row.bytes };
   }
 
   read(id: string): { bytes: Buffer; mime: string; file: string } {

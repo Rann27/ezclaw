@@ -1,5 +1,5 @@
 import type { Mode } from "@ezclaw/core";
-import { ChatTextIcon, type Icon, ImageIcon, PaintBrushIcon, TerminalWindowIcon } from "@phosphor-icons/react";
+import { ChatTextIcon, FilmStripIcon, type Icon, ImageIcon, PaintBrushIcon, TerminalWindowIcon } from "@phosphor-icons/react";
 
 export interface ModeInfo {
   mode: Mode;
@@ -38,6 +38,13 @@ export const MODE_INFO: Record<Mode, ModeInfo> = {
     icon: PaintBrushIcon,
     milestone: "M4",
     plan: "Satu gambar target, beberapa referensi dengan peran yang jelas, versi berantai, dan perbandingan sebelum dan sesudah.",
+  },
+  video: {
+    mode: "video",
+    label: "Video",
+    icon: FilmStripIcon,
+    milestone: "M5",
+    plan: "Video dari teks, atau dari frame awal (dan frame akhir) untuk image-to-video. Job berjalan di provider dan tetap ditunggu walau EZClaw dimulai ulang.",
   },
 };
 

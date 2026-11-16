@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ImageTurnMeta } from "./image.js";
+import type { VideoTurnMeta } from "./video.js";
 
 /**
  * Canonical message format. Every thread is stored this way and converted per protocol when sent.
@@ -14,6 +15,8 @@ export type Part =
   /** A stored image (an asset), uploaded as a reference or produced by an image model. */
   | { type: "image"; assetId: string; role?: string; seed?: number; /** Filled in just before sending; never stored. */ dataUrl?: string }
   /** A document attached to a user message, sent to the model as its extracted text. */
+  /** A stored video made by a video model. */
+  | { type: "video"; assetId: string }
   | { type: "file"; assetId: string; name: string; mime: string; text: string; /** Why the text looks the way it does (a scanned PDF, a cut-off file). */ note?: string };
 
 /**
@@ -107,5 +110,7 @@ export interface MessageDto {
   durationMs: number | null;
   /** For image turns: what was sent and with which settings. */
   image: ImageTurnMeta | null;
+  /** For video turns: what was sent, the provider job and its cost. */
+  video: VideoTurnMeta | null;
   createdAt: string;
 }

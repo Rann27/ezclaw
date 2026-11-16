@@ -10,6 +10,7 @@ import { AssetService } from "./assets.js";
 import { ChatService } from "./chat.js";
 import { CheckpointService } from "./checkpoints.js";
 import { ImageService } from "./image.js";
+import { VideoService } from "./video.js";
 import { MemoryService } from "./memory.js";
 import { ProcessManager } from "../agent/processes.js";
 import { McpService } from "../mcp/service.js";
@@ -22,6 +23,7 @@ export interface Services {
   chat: ChatService;
   assets: AssetService;
   image: ImageService;
+  video: VideoService;
   harness: HarnessService;
   rules: ApprovalRules;
   memory: MemoryService;
@@ -63,6 +65,14 @@ export function createServices(opts: { db: Db; secrets: SecretStore; fetchImpl?:
   const runs = new RunManager(opts.db, { ...agentDeps, ...(opts.imagePollMs ? { pollMs: opts.imagePollMs } : {}) });
   const chat = new ChatService(opts.db, registry, runs, harness, () => getSettings(opts.db).codexDir, memory, mcp, skills);
   const image = new ImageService(opts.db, registry, runs, assets);
+  const video = new VideoService(opts.db, registry, runs, assets, { ...agentDeps, ...(opts.imagePollMs ? { pollMs: opts.imagePollMs } : {}) });
   const checkpoints = new CheckpointService(opts.db, runs);
-  return { registry, runs, chat, assets, image, harness, rules, memory, checkpoints, processes, secrets: opts.secrets, mcp, skills };
+  return { registry, runs, chat, assets, image, video, harness, rules, memory, checkpoints, processes, secrets: opts.secrets, mcp, skills };
+}
+
+/** Startup: answers cut off by the last shutdown become errors; video jobs the provider accepted keep being waited for. */
+export function recoverRuns(services: Services) {
+  for (const r of services.chat.recover()) {
+    services.runs.startVideo({ threadId: r.threadId, assistantMessageId: r.messageId, modelRowId: r.modelRowId, text: r.meta.prompt, params: r.meta.params, resume: r.meta });
+  }
 }

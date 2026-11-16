@@ -9,7 +9,7 @@ import { MODE_INFO } from "../modes";
 import { Dialog } from "./Dialog";
 import { Menu, type MenuItem } from "./Menu";
 
-const BASE: Record<Mode, string> = { chat: "/chat", agent: "/agent", image: "/image", edit: "/edit" };
+const BASE: Record<Mode, string> = { chat: "/chat", agent: "/agent", image: "/image", edit: "/edit", video: "/video" };
 const COLLAPSED_KEY = "ezclaw.sidebar.collapsedGroups";
 
 function readCollapsed(): Set<string> {
@@ -23,7 +23,7 @@ function readCollapsed(): Set<string> {
 export function ThreadList({ mode }: { mode: Mode }) {
   const info = MODE_INFO[mode];
   const base = BASE[mode];
-  const newLabel = mode === "agent" ? "Tugas baru" : mode === "image" ? "Gambar baru" : mode === "edit" ? "Edit baru" : "Thread baru";
+  const newLabel = mode === "agent" ? "Tugas baru" : mode === "image" ? "Gambar baru" : mode === "edit" ? "Edit baru" : mode === "video" ? "Video baru" : "Thread baru";
   const query = useThreadList(mode);
   const active = (useSearch({ strict: false }) as { t?: string }).t;
   const [showArchived, setShowArchived] = useState(false);
@@ -88,7 +88,7 @@ export function ThreadList({ mode }: { mode: Mode }) {
         </div>
       )}
       {query.isSuccess && threads.length === 0 && !showArchived && (
-        <p className="px-2 py-1.5 text-dense text-fg-3">{mode === "agent" ? "Belum ada tugas. Pilih folder dan jelaskan tugas pertama." : mode === "image" ? "Belum ada gambar. Tulis prompt pertama untuk membuatnya." : mode === "edit" ? "Belum ada edit. Pilih gambar dan tulis instruksi pertama." : "Belum ada thread. Kirim pesan pertama untuk membuatnya."}</p>
+        <p className="px-2 py-1.5 text-dense text-fg-3">{mode === "agent" ? "Belum ada tugas. Pilih folder dan jelaskan tugas pertama." : mode === "image" ? "Belum ada gambar. Tulis prompt pertama untuk membuatnya." : mode === "edit" ? "Belum ada edit. Pilih gambar dan tulis instruksi pertama." : mode === "video" ? "Belum ada video. Tulis prompt, atau pasang frame awal." : "Belum ada thread. Kirim pesan pertama untuk membuatnya."}</p>
       )}
 
       <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-1 overflow-x-hidden overflow-y-auto">

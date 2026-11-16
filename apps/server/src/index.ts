@@ -5,7 +5,7 @@ import { createApp } from "./app.js";
 import { ConfigError, loadConfig } from "./config.js";
 import { openDatabase } from "./db/client.js";
 import { createSecretStore } from "./secrets.js";
-import { createServices } from "./services/index.js";
+import { createServices, recoverRuns } from "./services/index.js";
 
 // src/index.ts in dev and dist/index.js after build both sit one level below apps/server.
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -18,7 +18,7 @@ function main() {
   });
   const secrets = createSecretStore(config.dataDir, config.secretStore);
   const services = createServices({ db, secrets, assetsDir: join(config.dataDir, "assets") });
-  services.chat.recover();
+  recoverRuns(services);
   services.mcp.setCallbackBase(`http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`);
   services.registry.chatgpt.setCallbackBase(`http://127.0.0.1:${config.port}`);
   void services.mcp.startAll();

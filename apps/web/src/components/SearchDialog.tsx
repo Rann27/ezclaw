@@ -6,7 +6,7 @@ import { api } from "../api";
 import { MODE_INFO } from "../modes";
 import { Dialog } from "./Dialog";
 
-const BASE = { chat: "/chat", agent: "/agent", image: "/image", edit: "/edit" } as const;
+const BASE = { chat: "/chat", agent: "/agent", image: "/image", edit: "/edit", video: "/video" } as const;
 
 /** Finds threads by title or by what was said in them, across every mode. */
 export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {

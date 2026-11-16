@@ -493,6 +493,25 @@
   .composer-surface:has(textarea:focus-visible) { outline: 2px solid var(--focus); outline-offset: 3px; }
   .composer-surface textarea { min-height: 44px; font-size: 15px; }
   .composer-label { display: block; margin: 0 0 2px 2px; color: var(--text-2); font-size: 12px; font-weight: 600; }
+
+  /* Video: empty frame slot, waiting view, progress bar, and the finished clip. */
+  .frame-slot {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    width: 7rem; height: 5rem; border: 1px dashed var(--line-strong); border-radius: var(--r-sm);
+    background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer;
+    transition: border-color var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .frame-slot:hover:not(:disabled) { border-color: var(--brand-strong); color: var(--text); }
+  .frame-slot:disabled { opacity: 0.45; cursor: not-allowed; }
+  .video-pending {
+    display: grid; justify-items: center; align-content: center; gap: 6px; text-align: center;
+    width: 100%; max-width: 40rem; aspect-ratio: 16 / 9; padding: 16px;
+    border: 1px solid var(--line); border-radius: var(--r-md); background: var(--sunken);
+  }
+  .video-progress { width: min(18rem, 80%); height: 4px; overflow: hidden; border-radius: 2px; background: var(--line); }
+  .video-progress > span { display: block; height: 100%; background: var(--brand); transition: width var(--t-base) var(--ease); }
+  .video-progress-indeterminate { width: 30%; animation: video-sweep 1.6s var(--ease) infinite; }
+  .video-result { width: 100%; max-width: 40rem; max-height: 70vh; border-radius: var(--r-md); background: #000; }
   .composer-toolbar { padding-top: 6px; border-top: 1px solid var(--line); }
   .composer-hint { display: block; padding: 4px 4px 0; color: var(--text-3); font-size: 12px; line-height: 1.45; }
   .theme-switch { padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); }
@@ -648,4 +667,13 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition-duration: 0ms !important; }
   .btn:active, .theme-switch button:active, .chip-toggle:active, .model-chip:active { transform: none; }
+}
+
+@keyframes video-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(340%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video-progress-indeterminate { animation: none; width: 100%; opacity: 0.5; }
 }

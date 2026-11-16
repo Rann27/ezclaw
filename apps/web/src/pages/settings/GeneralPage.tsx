@@ -29,6 +29,7 @@ const ROLE_NOTE: Record<ModelRole, string> = {
   agent: "Dipakai untuk tugas Agent baru.",
   image: "Dipakai untuk thread Image baru.",
   edit: "Dipakai untuk Edit baru; kosong berarti ikut model Image.",
+  video: "Dipakai untuk thread Video baru.",
   composer: "Menyusun prompt gambar dan merapikan prompt edit.",
   title: "Memberi judul dan ringkasan untuk thread.",
   vision: "Dipakai saat pesan Chat berisi gambar tetapi modelnya tidak menerima gambar. Kosong: dipilih otomatis dari model yang menerima gambar.",
@@ -138,7 +139,7 @@ function DefaultModels() {
   return (
     <div className="grid gap-4">
       {MODEL_ROLES.map((role) => {
-        const kind = IMAGE_ROLES.includes(role) ? "image" : "text";
+        const kind = IMAGE_ROLES.includes(role) ? "image" : role === "video" ? "video" : "text";
         const options: ModelDto[] = all.filter((m) => (role === "vision" ? m.kind === "text" && m.summary.inputModalities.includes("image") : m.kind === kind || (kind === "image" && m.summary.outputModalities.includes("image"))));
         return (
           <div key={role} className="grid grid-cols-[15rem_minmax(0,1fr)] items-center gap-3">

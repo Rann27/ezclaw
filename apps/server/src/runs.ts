@@ -15,6 +15,7 @@ import { loadHistoryEntries } from "./agent/store.js";
 import { touchThread, updateMessage } from "./agent/store.js";
 import type { Db } from "./db/client.js";
 import { runImage, type ImageRunDeps, type ImageRunInput, type ImageRunResult } from "./imageRun.js";
+import { runVideo, type VideoRunInput, type VideoRunResult } from "./videoRun.js";
 import { callModel, newAccumulator, type TurnAccumulator } from "./provider/call.js";
 import { ProviderError } from "./provider/http.js";
 
@@ -65,7 +66,7 @@ interface ActiveRun {
   stopRequested: boolean;
   pendings: Map<string, Pending>;
   /** Only agent-style runs take messages while they work. */
-  kind: "chat" | "agent" | "image";
+  kind: "chat" | "agent" | "image" | "video";
   /** Messages sent while the run works, waiting for the end of the current step. */
   inbox: Part[][];
   /** Settles once the answer has been saved, so shutdown can wait for it. */
@@ -90,6 +91,8 @@ function stopError(): Error {
 export class RunManager {
   private readonly runs = new Map<string, ActiveRun>();
   private readonly byThread = new Map<string, string>();
+  /** Set while EZClaw shuts down, so video runs leave their provider jobs to be resumed. */
+  private shuttingDown = false;
 
   constructor(
     private readonly db: Db,
@@ -149,6 +152,12 @@ export class RunManager {
     return run.id;
   }
 
+  startVideo(input: VideoRunInput): string {
+    const run = this.create(input.threadId, input.assistantMessageId, "video");
+    run.finished = this.executeVideo(run, input);
+    return run.id;
+  }
+
   /** Queues a message for a working agent run. False when the thread's run cannot take one. */
   enqueue(threadId: string, parts: Part[]): string | null {
     const id = this.byThread.get(threadId);
@@ -176,6 +185,7 @@ export class RunManager {
   async stopAll(): Promise<void> {
     this.agent.processes.stopAll();
     void this.agent.mcp.stopAll();
+    this.shuttingDown = true;
     const pending = [...this.runs.values()].filter((r) => !r.done);
     for (const run of pending) this.stop(run.id);
     await Promise.allSettled(pending.map((r) => r.finished));
@@ -310,6 +320,19 @@ export class RunManager {
 
     const finishReason: FinishReason | null = acc.finish;
     this.emit(run, { type: "done", status, ...(finishReason ? { finishReason } : {}), ...(errorMessage ? { error: errorMessage } : {}) });
+    this.finish(run);
+  }
+
+  private async executeVideo(run: ActiveRun, input: VideoRunInput) {
+    let result: VideoRunResult;
+    try {
+      result = await runVideo(this.agent, { signal: run.abort.signal, emit: (e) => this.emit(run, e), shuttingDown: () => this.shuttingDown }, input);
+    } catch (err) {
+      result = run.abort.signal.aborted ? { status: "stopped" } : { status: "error", error: describeError(err) };
+      if (result.status === "error" && !(err instanceof ProviderError)) console.error(err);
+    }
+    touchThread(this.db, input.threadId);
+    this.emit(run, { type: "done", status: result.status, ...(result.error ? { error: result.error } : {}) });
     this.finish(run);
   }
 

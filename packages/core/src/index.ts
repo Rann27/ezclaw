@@ -8,5 +8,6 @@ export * from "./registry-api.js";
 export * from "./agent.js";
 export * from "./wire.js";
 export * from "./image.js";
+export * from "./video.js";
 export * from "./wrapper.js";
 export * from "./mcp.js";

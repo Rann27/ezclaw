@@ -91,6 +91,8 @@ export type RunEvent =
   | { type: "image_slot"; index: number; status: "queued" | "running" | "done" | "error"; assetId?: string; seed?: number; error?: string }
   /** The Prompt Composer turned the conversation into the prompt that is sent. */
   | { type: "composed"; prompt: string; useLastImage: boolean }
+  /** A video job moved on. `progress` is 0 to 100 when the provider reports it; `etaMs` is its estimate of the total time. */
+  | { type: "video_progress"; status: "submitted" | "running" | "downloading"; progress?: number; elapsedMs: number; etaMs?: number }
   | { type: "done"; status: "complete" | "stopped" | "error"; finishReason?: FinishReason; error?: string; stopReason?: RunStopReason };
 
 export interface AgentLoopConfig {

@@ -8,12 +8,13 @@ import { Dialog } from "../../components/Dialog";
 import { ProfileDialog } from "../../components/ProfileDialog";
 import { canAgent, canChat, canEdit, canGenerate, modelLabel, useInvalidateRegistry, useModels } from "../../lib/queries";
 
-type UseFilter = "" | "chat" | "agent" | "image" | "edit";
+type UseFilter = "" | "chat" | "agent" | "image" | "edit" | "video";
 const USE_FILTERS: { id: Exclude<UseFilter, "">; label: string; test: (m: ModelDto) => boolean }[] = [
   { id: "chat", label: "Chat", test: canChat },
   { id: "agent", label: "Agent (punya tools)", test: canAgent },
   { id: "image", label: "Image", test: (m) => m.kind === "image" && canGenerate(m) },
   { id: "edit", label: "Edit", test: (m) => m.kind === "image" && canEdit(m) },
+  { id: "video", label: "Video", test: (m) => m.kind === "video" },
 ];
 
 const PAGE = 80;
@@ -138,6 +139,7 @@ export function ModelsPage() {
                     <span className="ep-tag">{m.endpointName}</span>
                     <span className="text-meta text-fg-3">{SOURCE_LABEL[m.source]}</span>
                     {m.kind === "image" && <span className="ep-tag">{m.summary.editOnly ? "gambar, khusus edit" : "gambar"}</span>}
+                    {m.kind === "video" && <span className="ep-tag">video</span>}
                     {m.hasOverride && <span className="ep-tag">override</span>}
                     {m.omitCount > 0 && <span className="ep-tag">{m.omitCount} field ditolak</span>}
                   </div>
@@ -158,14 +160,20 @@ export function ModelsPage() {
                   >
                     <StarIcon size={18} weight={m.favorite ? "fill" : "regular"} aria-hidden className={m.favorite ? "text-brand-strong" : undefined} />
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    aria-label={m.kind === "image" ? `Jadikan ${modelLabel(m)} model teks` : `Jadikan ${modelLabel(m)} model gambar`}
-                    onClick={() => patch.mutate({ id: m.id, body: { kind: m.kind === "image" ? "text" : "image" } })}
+                  <label className="sr-only" htmlFor={`kind-${m.id}`}>
+                    Jenis model {modelLabel(m)}
+                  </label>
+                  <select
+                    id={`kind-${m.id}`}
+                    className="select w-auto"
+                    value={m.kind === "other" ? "text" : m.kind}
+                    title="Jenis model menentukan di mode mana model ini muncul."
+                    onChange={(e) => patch.mutate({ id: m.id, body: { kind: e.target.value as "text" | "image" | "video" } })}
                   >
-                    {m.kind === "image" ? "Jadikan teks" : "Jadikan gambar"}
-                  </button>
+                    <option value="text">Teks</option>
+                    <option value="image">Gambar</option>
+                    <option value="video">Video</option>
+                  </select>
                   <button type="button" className="btn btn-ghost" onClick={() => setAliasFor(m)} aria-haspopup="dialog">
                     Alias
                   </button>

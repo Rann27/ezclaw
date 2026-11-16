@@ -4,6 +4,7 @@ import { profilePatchSchema } from "./capabilities.js";
 import type { ChatParams, MessageDto } from "./chat.js";
 import { chatParamsSchema } from "./chat.js";
 import { imageParamsSchema, imageReferenceSchema, keepIdSchema, type ImageParams } from "./image.js";
+import { videoParamsSchema, type VideoParams, type VideoSpec } from "./video.js";
 import { approvalModeSchema, threadHarnessSchema, type ApprovalMode, type PlanItem, type ThreadHarness } from "./agent.js";
 
 export const authSchema = z.object({
@@ -149,7 +150,7 @@ export interface ModelDto {
   alias: string | null;
   favorite: boolean;
   source: "discovered" | "manual" | "suggested";
-  kind: "text" | "image" | "other";
+  kind: "text" | "image" | "video" | "other";
   summary: ModelSummary;
   hasOverride: boolean;
   omitCount: number;
@@ -167,6 +168,8 @@ export interface ModelProfileResponse {
   override: ProfilePatch | null;
   /** For image models: the wire and limits in effect (defaults merged with what is known). */
   imageSpec: ImageSpec | null;
+  /** For video models: the wire and limits in effect. */
+  videoSpec: VideoSpec | null;
   /** Which curated preset files matched, for the "Inspect profile" view. */
   presetSources: { source: string; checked: string }[];
 }
@@ -176,7 +179,7 @@ export const modelPatchSchema = z
     alias: z.string().trim().max(60).nullable(),
     favorite: z.boolean(),
     /** Whether the model answers in text or makes images; manual and discovered models can be wrong. */
-    kind: z.enum(["text", "image"]),
+    kind: z.enum(["text", "image", "video"]),
     override: profilePatchSchema.nullable(),
     /** Replaces the learned list; used to clear entries. */
     omit: z.array(z.string()),
@@ -189,13 +192,13 @@ export const manualModelSchema = z.object({
   modelId: z.string().trim().min(1, "ID model wajib diisi.").max(200),
   name: z.string().trim().max(100).optional(),
   /** Models added by hand are text models unless said otherwise. */
-  kind: z.enum(["text", "image"]).optional(),
+  kind: z.enum(["text", "image", "video"]).optional(),
 });
 
 /* ------------------------------------------------------------------ threads */
 
 export const threadCreateSchema = z.object({
-  mode: z.enum(["chat", "agent", "image", "edit"]),
+  mode: z.enum(["chat", "agent", "image", "edit", "video"]),
   modelId: z.string().optional(),
   /** Agent threads: absolute path of the folder to work in. */
   workspace: z.string().trim().min(1).max(1000).optional(),
@@ -221,6 +224,7 @@ export const threadPatchSchema = z
     confirmFull: z.boolean(),
     harness: threadHarnessSchema,
     imageParams: imageParamsSchema,
+    videoParams: videoParamsSchema,
   })
   .partial()
   .strict();
@@ -248,6 +252,37 @@ export const sendImageSchema = z.object({
   exact: z.boolean().optional(),
 });
 export type SendImageInput = z.infer<typeof sendImageSchema>;
+
+/** One video: a prompt, and for image-to-video a start frame (and an end frame on models that take one). */
+export const sendVideoSchema = z.object({
+  text: z.string().trim().max(30_000).default(""),
+  modelId: z.string().min(1),
+  startFrame: z.string().min(1).max(80).optional(),
+  endFrame: z.string().min(1).max(80).optional(),
+  params: videoParamsSchema.optional(),
+});
+export type SendVideoInput = z.infer<typeof sendVideoSchema>;
+
+/** Price check for a video before it is sent: the settings as they stand in the composer. */
+export const videoQuoteSchema = z.object({
+  modelId: z.string().min(1),
+  text: z.string().max(30_000).default(""),
+  params: videoParamsSchema.default({}),
+  hasStart: z.boolean().default(false),
+  hasEnd: z.boolean().default(false),
+});
+export type VideoQuoteInput = z.infer<typeof videoQuoteSchema>;
+
+export interface VideoQuoteResponse {
+  /** USD, or null when the provider gives no price beforehand. */
+  usd: number | null;
+  /** Where the number comes from, or why there is none. */
+  source: string;
+  /** The model that would take the job (Venice may switch to the image variant). */
+  modelId: string;
+  /** Set when this request would be refused before it is sent. */
+  error: string | null;
+}
 
 /** One edit: the image to change, references with roles, what to keep, and the instruction. */
 export const sendEditSchema = z.object({
@@ -302,13 +337,14 @@ export interface LibraryResponse {
 
 export interface ThreadDetailDto {
   id: string;
-  mode: "chat" | "agent" | "image" | "edit";
+  mode: "chat" | "agent" | "image" | "edit" | "video";
   title: string;
   pinned: boolean;
   modelId: string | null;
   systemPrompt: string;
   params: ChatParams;
   imageParams: ImageParams;
+  videoParams: VideoParams;
   workspace: string | null;
   approvalMode: ApprovalMode;
   harness: ThreadHarness;

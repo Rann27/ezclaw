@@ -1,6 +1,6 @@
 import { IMAGE_ROLE_LABELS, IMAGE_WIRE_LABELS, type ImageParams, type ImageReference, type ImageRole, type ImageWire, type MessageDto } from "@ezclaw/core";
 import { Link } from "@tanstack/react-router";
-import { ArrowsOutIcon, PaintBrushIcon, ClipboardTextIcon, CodeIcon, DownloadSimpleIcon, DiceFiveIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowsOutIcon, PaintBrushIcon, ClipboardTextIcon, CodeIcon, DownloadSimpleIcon, DiceFiveIcon, FilmStripIcon, PlusIcon } from "@phosphor-icons/react";
 import { useRef, useState, type ReactNode } from "react";
 import { downloadAsset } from "../../lib/assets";
 import { Dialog } from "../Dialog";
@@ -83,6 +83,10 @@ export function AssistantTurn({ message, live, running, maxReferences, onShowReq
                   <Link to="/edit" search={{ target: s.assetId }} className="btn btn-ghost min-h-8 px-2 text-dense no-underline">
                     <PaintBrushIcon size={14} aria-hidden />
                     Edit gambar ini
+                  </Link>
+                  <Link to="/video" search={{ start: s.assetId }} className="btn btn-ghost min-h-8 px-2 text-dense no-underline">
+                    <FilmStripIcon size={14} aria-hidden />
+                    Jadikan video
                   </Link>
                   <ActionButton icon={<DownloadSimpleIcon size={14} aria-hidden />} label="Unduh" onClick={() => void downloadAsset(s.assetId!, `ezclaw-${s.assetId!.slice(0, 8)}.png`)} />
                   <ActionButton

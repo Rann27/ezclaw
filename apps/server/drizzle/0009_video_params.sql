@@ -1,0 +1,1 @@
+ALTER TABLE `threads` ADD `video_params` text DEFAULT '{}' NOT NULL;

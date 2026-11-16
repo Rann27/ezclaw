@@ -38,6 +38,9 @@ import {
   sendEditSchema,
   type DirListResponse,
   sendImageSchema,
+  sendVideoSchema,
+  videoQuoteSchema,
+  type VideoQuoteResponse,
   sendMessageSchema,
   settingsPatchSchema,
   threadCreateSchema,
@@ -55,7 +58,8 @@ import {
   type RequestLogResponse,
   type ThreadListResponse,
 } from "@ezclaw/core";
-import { readFileSync, statSync } from "node:fs";
+import { createReadStream, readFileSync, statSync } from "node:fs";
+import { Readable } from "node:stream";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
@@ -111,7 +115,7 @@ function webEntry(distDir: string): string | null {
 }
 
 export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) {
-  const { registry, runs, chat, secrets, harness, rules, assets, image, memory, checkpoints, processes, mcp, skills } = services;
+  const { registry, runs, chat, secrets, harness, rules, assets, image, video, memory, checkpoints, processes, mcp, skills } = services;
   const app = new Hono();
   app.use("*", hostGuard(config.allowedHosts));
   app.use("*", securityHeaders);
@@ -196,8 +200,8 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
   api.post("/threads", async (c) => {
     const input = threadCreateSchema.parse(await readJson(c.req.raw));
     const settings = getSettings(db);
-    const role = input.mode === "agent" ? "agent" : input.mode === "image" ? "image" : input.mode === "edit" ? "edit" : "chat";
-    const defaultModelId = settings.defaultModels[role] ?? (input.mode === "edit" ? settings.defaultModels.image : input.mode === "image" ? undefined : settings.defaultModels.chat);
+    const role = input.mode === "agent" ? "agent" : input.mode === "image" ? "image" : input.mode === "edit" ? "edit" : input.mode === "video" ? "video" : "chat";
+    const defaultModelId = settings.defaultModels[role] ?? (input.mode === "edit" ? settings.defaultModels.image : input.mode === "image" || input.mode === "video" ? undefined : settings.defaultModels.chat);
     return c.json(
       chat.create({ mode: input.mode, modelId: input.modelId, defaultModelId, workspace: input.workspace, approvalMode: input.approvalMode, confirmFull: input.confirmFull, harness: input.harness }),
       201,
@@ -234,6 +238,14 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
     const input = sendImageSchema.parse(await readJson(c.req.raw));
     return c.json(image.send(c.req.param("id"), input), 201);
   });
+  api.post("/video/quote", async (c) => {
+    const input = videoQuoteSchema.parse(await readJson(c.req.raw));
+    return c.json<VideoQuoteResponse>(await video.quote(input, AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(20_000)])));
+  });
+  api.post("/threads/:id/videos", async (c) => {
+    const input = sendVideoSchema.parse(await readJson(c.req.raw));
+    return c.json(video.send(c.req.param("id"), input), 201);
+  });
 
   /* ------------------------------------------------------------------ assets */
   api.post("/assets", async (c) => {
@@ -262,6 +274,9 @@ export function createApp({ config, db, dbPath, startedAt, services }: AppDeps) 
     );
   });
   api.get("/assets/:id", (c) => {
+    const located = assets.locate(c.req.param("id"));
+    // Videos are served in byte ranges so the player can seek without loading the whole file.
+    if (located.mime.startsWith("video/")) return serveRange(located, c.req.header("range"), c.req.query("download") === "1");
     const { bytes, mime, file } = assets.read(c.req.param("id"));
     return new Response(new Uint8Array(bytes), {
       headers: {
@@ -620,4 +635,33 @@ function safeParse(text: string): unknown {
   } catch {
     return text;
   }
+}
+
+/** Serves a file whole or one byte range of it, as a video player asks for. */
+function serveRange(file: { path: string; mime: string; file: string; size: number }, range: string | undefined, download: boolean): Response {
+  let size = file.size;
+  try {
+    size = statSync(file.path).size;
+  } catch {
+    throw new HttpError(404, "asset_missing", "File ini hilang dari folder data EZClaw.");
+  }
+  const headers: Record<string, string> = {
+    "content-type": file.mime,
+    "accept-ranges": "bytes",
+    "cache-control": "private, max-age=31536000, immutable",
+    "x-content-type-options": "nosniff",
+    ...(download ? { "content-disposition": `attachment; filename="${file.file}"` } : {}),
+  };
+  const m = range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+  if (m && (m[1] || m[2])) {
+    let start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    let end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+    if (start >= size || start > end) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
+    start = Math.max(0, start);
+    end = Math.max(start, end);
+    const body = Readable.toWeb(createReadStream(file.path, { start, end })) as ReadableStream;
+    return new Response(body, { status: 206, headers: { ...headers, "content-range": `bytes ${start}-${end}/${size}`, "content-length": String(end - start + 1) } });
+  }
+  const body = Readable.toWeb(createReadStream(file.path)) as ReadableStream;
+  return new Response(body, { headers: { ...headers, "content-length": String(size) } });
 }

@@ -4,6 +4,7 @@ import { readLastMode } from "./modes";
 const AgentPage = lazyRouteComponent(() => import("./pages/AgentPage"), "AgentPage");
 const ChatPage = lazyRouteComponent(() => import("./pages/ChatPage"), "ChatPage");
 const EditPage = lazyRouteComponent(() => import("./pages/EditPage"), "EditPage");
+const VideoPage = lazyRouteComponent(() => import("./pages/VideoPage"), "VideoPage");
 const ImagePage = lazyRouteComponent(() => import("./pages/ImagePage"), "ImagePage");
 const EndpointsPage = lazyRouteComponent(() => import("./pages/settings/EndpointsPage"), "EndpointsPage");
 const GeneralPage = lazyRouteComponent(() => import("./pages/settings/GeneralPage"), "GeneralPage");
@@ -79,6 +80,16 @@ const editRoute = createRoute({
   component: EditPage,
 });
 
+const videoRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "video",
+  validateSearch: (search: Record<string, unknown>): { t?: string; start?: string } => ({
+    t: typeof search.t === "string" && search.t.length > 0 ? search.t : undefined,
+    start: typeof search.start === "string" && search.start.length > 0 ? search.start : undefined,
+  }),
+  component: VideoPage,
+});
+
 const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "library", component: LibraryPage });
 
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "settings", component: SettingsLayout });
@@ -96,6 +107,7 @@ const routeTree = rootRoute.addChildren([
   agentRoute,
   imageRoute,
   editRoute,
+  videoRoute,
   libraryRoute,
   settingsRoute.addChildren([settingsIndex, settingsEndpoints, settingsModels, settingsHarness, settingsMemory, settingsMcp, settingsSkills]),
 ]);

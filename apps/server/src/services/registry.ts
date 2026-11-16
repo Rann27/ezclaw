@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
+  defaultVideoSpec,
+  defaultVideoWire,
+  mergeVideoSpec,
+  type VideoSpec,
+  type VideoWire,
   defaultImageSpec,
   defaultImageWire,
   mergeImageSpec,
@@ -28,6 +33,7 @@ import {
   listPath,
   matchPresets,
   parseModelList,
+  parseOpenRouterVideos,
   PRESET_FILES,
   profileFamily,
   selectableFamilies,
@@ -50,9 +56,9 @@ const DISCOVERY_TIMEOUT_MS = 20_000;
 const MAX_MODELS_PER_ENDPOINT = 5000;
 /**
  * Bump when discovery starts finding models it missed before (e.g. 2: Venice image/edit and
- * OpenRouter image models; 3: Venice multi-edit and style-reference limits). On start, endpoints that connected earlier reload their lists once.
+ * OpenRouter image models; 3: Venice multi-edit and style-reference limits; 4: video models; 5: Venice "adaptive" ratio). On start, endpoints that connected earlier reload their lists once.
  */
-export const DISCOVERY_VERSION = 3;
+export const DISCOVERY_VERSION = 5;
 const DISCOVERY_VERSION_KEY = "_discoveryVersion";
 
 export interface ResolvedModel {
@@ -335,6 +341,7 @@ export class RegistryService {
         try {
           discovered = parseModelList(parser, JSON.parse(text));
           if (parser === "experiential") discovered = enrichExperiential(discovered, await this.experientialCatalog(row.baseUrl));
+          if (parser === "openrouter") discovered = [...discovered, ...(await this.openrouterVideos(row, key))];
         } catch (err) {
           failure = err instanceof DiscoveryParseError ? err.message : "Respons daftar model bukan JSON.";
         }
@@ -363,6 +370,20 @@ export class RegistryService {
     const message = failure ?? "Gagal memuat daftar model.";
     record(false, message);
     return { ok: false, message, modelCount: this.modelCount(id), usedSuggestions: false };
+  }
+
+  /** OpenRouter lists video models on their own path; an empty list when it cannot be read. */
+  private async openrouterVideos(row: EndpointRow, key: string | null): Promise<DiscoveredModel[]> {
+    try {
+      const res = await this.fetchImpl(joinUrl(row.baseUrl, "/videos/models"), {
+        method: "GET",
+        headers: buildHeaders(this.connectionFor(row), key, "application/json"),
+        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+      });
+      return res.ok ? parseOpenRouterVideos(await res.json()) : [];
+    } catch {
+      return [];
+    }
   }
 
   /** Experiential Labs' keyless catalog on the endpoint's own host, page by page. Empty when it cannot be read. */
@@ -518,6 +539,7 @@ export class RegistryService {
       omit: m.resolved.omit,
       override: m.row.override,
       imageSpec: m.row.kind === "image" ? this.imageSpecFor(rowId).spec : null,
+      videoSpec: m.row.kind === "video" ? this.videoSpecFor(rowId).spec : null,
       presetSources: m.matchedSources,
     };
   }
@@ -539,6 +561,14 @@ export class RegistryService {
     return { wire, spec, textOutput };
   }
 
+  /** The wire a video model uses and what it accepts, like imageSpecFor. */
+  videoSpecFor(rowId: string): { wire: VideoWire; spec: VideoSpec } {
+    const m = this.resolveModel(rowId);
+    const patch = m.resolved.profile.video;
+    const wire = patch?.wire ?? defaultVideoWire(m.family, m.endpoint.baseUrl);
+    return { wire, spec: mergeVideoSpec(defaultVideoSpec(wire), { ...patch, wire }) };
+  }
+
   patchModel(rowId: string, patch: ModelPatch): ModelDto {
     this.modelRow(rowId);
     const set: Partial<typeof models.$inferInsert> = {};
@@ -551,7 +581,7 @@ export class RegistryService {
     return this.getModelDto(rowId);
   }
 
-  addManualModel(endpointId: string, input: { modelId: string; name?: string; kind?: "text" | "image" }): ModelDto {
+  addManualModel(endpointId: string, input: { modelId: string; name?: string; kind?: "text" | "image" | "video" }): ModelDto {
     this.endpointRow(endpointId);
     const existing = this.db
       .select()

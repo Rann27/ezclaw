@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { videoSpecPatchSchema } from "./video.js";
 
 /** Sampling controls EZClaw knows how to map. Anything else goes through "extras" or the extra body. */
 export const SAMPLING_PARAMS = [
@@ -150,6 +151,8 @@ export const capabilityProfileSchema = z.object({
   extras: z.array(extraParamSchema),
   /** Present for image models: which wire to use and what it accepts. Facts here refine the wire's defaults. */
   image: imageSpecPatchSchema.optional(),
+  /** Present for video models: which wire to use and what it accepts. */
+  video: videoSpecPatchSchema.optional(),
   /**
    * Mark the prompt for provider-side caching (Anthropic cache_control, also passed through by OpenRouter
    * for Claude models). Cached input is billed at a fraction of the normal price on later requests.

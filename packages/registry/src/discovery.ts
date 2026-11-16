@@ -2,6 +2,9 @@ import {
   MODALITIES,
   SAMPLING_PARAMS,
   SAMPLING_SPEC_DEFAULTS,
+  VIDEO_MODEL_NAME,
+  venicePairedId,
+  type VideoSpecPatch,
   type Modality,
   type NumberSpec,
   type ProfilePatch,
@@ -9,7 +12,7 @@ import {
 } from "@ezclaw/core";
 import type { DiscoveryParser } from "./catalog.js";
 
-export type ModelKind = "text" | "image" | "other";
+export type ModelKind = "text" | "image" | "video" | "other";
 
 export interface DiscoveredModel {
   modelId: string;
@@ -94,8 +97,8 @@ function parseOpenAI(item: Json): DiscoveredModel | null {
   const modelId = raw.replace(/^models\//, "");
   // A plain list says nothing about output, so drawing models are told apart by name. Wrong guesses
   // can be flipped in Settings, Model.
-  const kind = IMAGE_MODEL_NAME.test(modelId) ? "image" : "text";
-  return { modelId, name: modelId, kind, patch: {}, meta: {} };
+  const kind = IMAGE_MODEL_NAME.test(modelId) ? "image" : VIDEO_MODEL_NAME.test(modelId) ? "video" : "text";
+  return { modelId, name: modelId, kind, patch: kind === "video" ? { inputModalities: ["text", "image"], outputModalities: ["video"], tools: false } : {}, meta: {} };
 }
 
 const IMAGE_MODEL_NAME = /(gpt-image|dall-e|imagen|flux|seedream|seededit|stable-diffusion|sdxl|ideogram|recraft|qwen-image|wanx|image-(?:gen|edit|preview)|-image(?:-|$)|cogview|kolors|hidream)/i;
@@ -164,13 +167,74 @@ function parseOpenRouter(item: Json): DiscoveredModel | null {
   };
 }
 
+/** Venice video models: text-to-video and image-to-video are separate ids; upscalers and video-to-video are left out. */
+function veniceVideo(modelId: string, name: string, c: Json | null, meta: Record<string, unknown>): DiscoveredModel | null {
+  const modelType = asString(c?.model_type);
+  if (modelType !== "text-to-video" && modelType !== "image-to-video") return null;
+  const strings = (v: unknown) => asArray(v).filter((x): x is string => typeof x === "string");
+  const durations = strings(c?.durations)
+    .map((d) => Number.parseInt(d, 10))
+    .filter((d) => Number.isFinite(d) && d > 0);
+  const imageIn = modelType === "image-to-video";
+  const video: VideoSpecPatch = {
+    wire: "venice-video",
+    durations,
+    resolutions: strings(c?.resolutions),
+    aspectRatios: strings(c?.aspect_ratios),
+    textToVideo: !imageIn,
+    startFrame: imageIn,
+    endFrame: false,
+    audio: c?.audio_configurable === true ? "optional" : c?.audio === true ? "always" : "none",
+    negativePrompt: true,
+    seed: false,
+    promptLimit: asNumber(c?.prompt_character_limit) ?? 2500,
+    pairedModelId: venicePairedId(modelId),
+  };
+  return { modelId, name, kind: "video", patch: { inputModalities: imageIn ? ["text", "image"] : ["text"], outputModalities: ["video"], tools: false, video }, meta };
+}
+
+/** OpenRouter's /videos/models list, which carries the per-model limits the main list lacks. */
+export function parseOpenRouterVideos(json: unknown): DiscoveredModel[] {
+  const data = asArray(asRecord(json)?.data);
+  const out: DiscoveredModel[] = [];
+  for (const entry of data) {
+    const item = asRecord(entry);
+    const modelId = asString(item?.id);
+    if (!item || !modelId) continue;
+    const strings = (v: unknown) => asArray(v).filter((x): x is string => typeof x === "string");
+    const frames = strings(item.supported_frame_images);
+    const durations = asArray(item.supported_durations).filter((d): d is number => typeof d === "number" && d > 0);
+    const video: VideoSpecPatch = {
+      wire: "openrouter-videos",
+      durations,
+      resolutions: strings(item.supported_resolutions),
+      aspectRatios: strings(item.supported_aspect_ratios),
+      textToVideo: true,
+      startFrame: frames.includes("first_frame"),
+      endFrame: frames.includes("last_frame"),
+      audio: item.generate_audio === true ? "optional" : "none",
+      seed: item.seed === true,
+      negativePrompt: false,
+    };
+    out.push({
+      modelId,
+      name: asString(item.name) ?? modelId,
+      kind: "video",
+      patch: { inputModalities: frames.length ? ["text", "image"] : ["text"], outputModalities: ["video"], tools: false, video },
+      meta: { pricing: item.pricing_skus ?? null },
+    });
+  }
+  return out;
+}
+
 function parseVenice(item: Json): DiscoveredModel | null {
   const modelId = asString(item.id);
   const type = asString(item.type);
-  if (!modelId || (type !== "text" && type !== "image" && type !== "inpaint")) return null;
+  if (!modelId || (type !== "text" && type !== "image" && type !== "inpaint" && type !== "video")) return null;
   const spec = asRecord(item.model_spec);
   const name = asString(spec?.name) ?? modelId;
   const meta: Record<string, unknown> = { constraints: spec?.constraints ?? null, pricing: spec?.pricing ?? null };
+  if (type === "video") return veniceVideo(modelId, name, asRecord(spec?.constraints), meta);
 
   if (type === "image" || type === "inpaint") {
     const c = asRecord(spec?.constraints);

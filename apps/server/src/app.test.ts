@@ -101,7 +101,7 @@ describe("api", () => {
 
   it("lists threads per mode and validates the mode", async () => {
     expect(await ctx.json("/api/threads?mode=chat")).toEqual({ threads: [] });
-    expect((await req("/api/threads?mode=video")).status).toBe(400);
+    expect((await req("/api/threads?mode=audio")).status).toBe(400);
   });
 
   it("answers unknown API paths with a JSON 404", async () => {

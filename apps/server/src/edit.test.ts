@@ -215,7 +215,7 @@ describe("edit", () => {
 
     expect(await ctx.services.registry.refreshStaleDiscovery()).toBe(1);
     const ids = (await ctx.json<ModelListResponse>("/api/models")).models.filter((m) => m.endpointId === endpoint.id).map((m) => m.modelId).sort();
-    expect(ids).toEqual(["flux-gen", "krea-gen", "nano-edit", "qwen-edit", "venice-text"]);
+    expect(ids).toEqual(["flux-gen", "krea-gen", "nano-edit", "qwen-edit", "venice-text", "wan-mock-image-to-video", "wan-mock-text-to-video"]);
     // Once is enough.
     expect(await ctx.services.registry.refreshStaleDiscovery()).toBe(0);
   });

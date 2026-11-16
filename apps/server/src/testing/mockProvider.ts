@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { agentAnthropic, agentChat, agentResponses } from "./agentStreams.js";
 import { SCRIPTS } from "./agentScripts.js";
 import { handleImageRoute, imageChatResponse } from "./mockImages.js";
+import { handleVideoRoute } from "./mockVideos.js";
 
 export interface RecordedRequest {
   method: string;
@@ -86,6 +87,7 @@ export async function startMockProvider(port = 0): Promise<MockProvider> {
 
     const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     if (handleImageRoute({ req, res, path, body, raw, origin })) return;
+    if (handleVideoRoute({ req, res, path, body, origin })) return;
 
     if (req.method === "GET" && path === "/page.html") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -121,8 +123,11 @@ export async function startMockProvider(port = 0): Promise<MockProvider> {
       const edit = { id: "qwen-edit", type: "inpaint", model_spec: { name: "Qwen Edit", constraints: { aspectRatios: ["auto", "1:1", "16:9"], promptCharacterLimit: 1500, combineImages: false } } };
       const gen = { id: "flux-gen", type: "image", model_spec: { name: "Flux", constraints: { promptCharacterLimit: 1500, steps: { default: 20, max: 30 }, widthHeightDivisor: 16 } } };
       const multi = { id: "nano-edit", type: "inpaint", model_spec: { name: "Nano Edit", constraints: { aspectRatios: ["auto", "1:1"], promptCharacterLimit: 1500, combineImages: true, maxInputImages: 4, resolutions: ["1K", "2K"] } } };
+      const t2v = { id: "wan-mock-text-to-video", type: "video", model_spec: { name: "Wan Mock T2V", constraints: { model_type: "text-to-video", durations: ["5s", "10s"], resolutions: ["480p", "720p"], aspect_ratios: ["16:9", "9:16", "1:1"], audio: false, audio_configurable: false, per_reference_audio: false, prompt_character_limit: 1500 } } };
+      const i2v = { id: "wan-mock-image-to-video", type: "video", model_spec: { name: "Wan Mock I2V", constraints: { model_type: "image-to-video", durations: ["5s", "10s"], resolutions: ["480p", "720p"], aspect_ratios: [], audio: true, audio_configurable: true, per_reference_audio: false } } };
+      const upscale = { id: "topaz-mock", type: "video", model_spec: { name: "Upscale", constraints: { model_type: "video", durations: [], resolutions: [], aspect_ratios: [], audio: false, audio_configurable: false, per_reference_audio: false } } };
       const styled = { id: "krea-gen", type: "image", model_spec: { name: "Krea", constraints: { promptCharacterLimit: 1500, steps: { default: 20, max: 30 }, widthHeightDivisor: 16, maxStyleReferences: 3, supportsStyleReferenceStrength: true } } };
-      return json(200, { object: "list", type: all ? "all" : "text", data: all ? [text, edit, gen, multi, styled] : [text] });
+      return json(200, { object: "list", type: all ? "all" : "text", data: all ? [text, edit, gen, multi, styled, t2v, i2v, upscale] : [text] });
     }
     // Experiential Labs: the key's list says only ids; the keyless catalog on the same host has the facts.
     if (req.method === "GET" && path === "/explabs/v1/models") {

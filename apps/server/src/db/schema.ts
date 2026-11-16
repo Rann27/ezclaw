@@ -1,4 +1,4 @@
-import type { ChatParams, FinishReason, ImageParams, MessageStatus, Part, PlanItem, ProfilePatch, RawTurn, ThreadHarness, Usage } from "@ezclaw/core";
+import type { ChatParams, FinishReason, ImageParams, VideoParams, MessageStatus, Part, PlanItem, ProfilePatch, RawTurn, ThreadHarness, Usage } from "@ezclaw/core";
 import { MESSAGE_STATUSES, MODES } from "@ezclaw/core";
 import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
@@ -43,7 +43,7 @@ export const models = sqliteTable(
     alias: text("alias"),
     favorite: integer("favorite", { mode: "boolean" }).notNull().default(false),
     source: text("source", { enum: ["discovered", "manual", "suggested"] }).notNull(),
-    kind: text("kind", { enum: ["text", "image", "other"] }).notNull().default("text"),
+    kind: text("kind", { enum: ["text", "image", "video", "other"] }).notNull().default("text"),
     /** Profile facts the provider reported at the last refresh (the discovery layer). */
     discoveredPatch: text("discovered_patch", { mode: "json" }).$type<ProfilePatch>().notNull().default({}),
     /** The owner's profile override. */
@@ -76,6 +76,8 @@ export const threads = sqliteTable(
     harness: text("harness", { mode: "json" }).$type<ThreadHarness>().notNull().default({ on: true, profileId: "ezclaw-agent", tools: [] }),
     /** Image threads: size, aspect ratio, count and other settings shown in the composer. */
     imageParams: text("image_params", { mode: "json" }).$type<ImageParams>().notNull().default({}),
+    /** Video threads: duration, resolution, sound and other settings shown in the composer. */
+    videoParams: text("video_params", { mode: "json" }).$type<VideoParams>().notNull().default({}),
     /** The agent's current plan, as last written with update_plan. */
     plan: text("plan", { mode: "json" }).$type<PlanItem[]>().notNull().default([]),
     /** Compaction: messages up to `summarySeq` are replaced by `summary` when sent to the model. */
