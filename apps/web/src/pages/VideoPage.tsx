@@ -8,6 +8,7 @@ import { Dialog } from "../components/Dialog";
 import { ModelPickerDialog } from "../components/ModelPicker";
 import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
+import { WorkspaceInspector } from "../components/WorkspaceInspector";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
 import { VideoComposer, type Frames } from "../components/video/VideoComposer";
 import { VideoInspector } from "../components/video/VideoInspector";
@@ -257,9 +258,9 @@ export function VideoPage() {
       </section>
 
       {inspectorOpen && (
-        <aside aria-label="Pengaturan video" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
+        <WorkspaceInspector label="Pengaturan video" mode="Video">
           <VideoInspector model={chosen} onPickModel={() => setPickerOpen(true)} onShowProfile={() => chosen && setProfileFor(chosen.id)} params={draft.params} onParams={(p) => update({ params: p })} running={running} />
-        </aside>
+        </WorkspaceInspector>
       )}
 
       <ModelPickerDialog

@@ -7,6 +7,7 @@ import { ThemeSwitch } from "./ThemeSwitch";
 import { ThreadList } from "./ThreadList";
 import { StaleServerBanner } from "./StaleServerBanner";
 import { SearchDialog } from "./SearchDialog";
+import { Button } from "./ui/button";
 
 function modeFromPath(pathname: string): Mode | null {
   const first = pathname.split("/")[1] ?? "";
@@ -58,20 +59,21 @@ function useRouteEntrance(target: RefObject<HTMLElement | null>, section: string
       return;
     }
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    target.current?.animate(
+    const animation = target.current?.animate(
       [
-        { opacity: 0, transform: "translateY(10px)" },
+        { opacity: 0, transform: "translateY(4px)" },
         { opacity: 1, transform: "none" },
       ],
-      { duration: 320, easing: "cubic-bezier(0.2, 0, 0, 1)" },
+      { duration: 140, easing: "cubic-bezier(0.23, 1, 0.32, 1)" },
     );
+    return () => animation?.cancel();
   }, [section, target]);
 }
 
 function Wordmark() {
   return (
     <span className="wordmark">
-      <span className="text-brand-text">EZ</span>Claw
+      <span>EZ</span>Claw
     </span>
   );
 }
@@ -128,11 +130,11 @@ export function Shell() {
           </div>
         </div>
 
-        <button type="button" className="rail-search" onClick={() => setSearchOpen(true)}>
-          <MagnifyingGlassIcon size={19} aria-hidden />
+        <Button type="button" variant="outline" className="rail-search" onClick={() => setSearchOpen(true)}>
+          <MagnifyingGlassIcon size={16} aria-hidden />
           <span>Cari percakapan</span>
           <kbd aria-label="Pintasan Ctrl K">Ctrl K</kbd>
-        </button>
+        </Button>
 
         <nav aria-label="Mode">
           <ul className="grid gap-1">

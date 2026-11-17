@@ -10,6 +10,7 @@ import { ratioFromParams } from "../components/image/ImageLoader";
 import { newImageParams, withSafeModePref } from "../lib/imageDefaults";
 import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
+import { WorkspaceInspector } from "../components/WorkspaceInspector";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
 import { ImageComposer } from "../components/image/ImageComposer";
 import { ImageInspector } from "../components/image/ImageInspector";
@@ -261,9 +262,9 @@ export function ImagePage() {
       </section>
 
       {inspectorOpen && (
-        <aside aria-label="Pengaturan gambar" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
+        <WorkspaceInspector label="Pengaturan gambar" mode="Image">
           {inspector}
-        </aside>
+        </WorkspaceInspector>
       )}
 
       <ModelPickerDialog

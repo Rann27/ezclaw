@@ -12,6 +12,7 @@ import { Dialog } from "../components/Dialog";
 import { ModelPickerDialog } from "../components/ModelPicker";
 import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
+import { WorkspaceInspector } from "../components/WorkspaceInspector";
 import { Composer } from "../components/chat/Composer";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
 import { useSlashItems } from "../components/chat/SlashMenu";
@@ -399,9 +400,9 @@ export function AgentPage() {
       </section>
 
       {inspectorOpen && (
-        <aside aria-label="Pengaturan tugas" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
+        <WorkspaceInspector label="Pengaturan tugas" mode="Agent">
           {inspector}
-        </aside>
+        </WorkspaceInspector>
       )}
 
       <ModelPickerDialog accept={canAgent} open={pickerOpen} onClose={() => { setPickerOpen(false); setFocusSignal((n) => n + 1); }} selectedId={chosen?.id ?? null} onSelect={(m) => update({ modelId: m.id })} />

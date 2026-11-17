@@ -8,6 +8,7 @@ import { Dialog } from "../components/Dialog";
 import { ModelPickerDialog } from "../components/ModelPicker";
 import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
+import { WorkspaceInspector } from "../components/WorkspaceInspector";
 import { Composer } from "../components/chat/Composer";
 import { Inspector } from "../components/chat/Inspector";
 import { AssistantMessage, UserMessage } from "../components/chat/MessageView";
@@ -360,9 +361,9 @@ export function ChatPage() {
       </section>
 
       {inspectorOpen && (
-        <aside aria-label="Pengaturan percakapan" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
+        <WorkspaceInspector label="Pengaturan percakapan" mode="Chat">
           {inspector}
-        </aside>
+        </WorkspaceInspector>
       )}
 
       <ModelPickerDialog accept={canChat} open={pickerOpen} onClose={() => { setPickerOpen(false); setFocusSignal((n) => n + 1); }} selectedId={chosen?.id ?? null} onSelect={(m) => update({ modelId: m.id })} />

@@ -1,5 +1,6 @@
 import { XIcon } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { Button } from "./ui/button";
 
 interface DialogProps {
   open: boolean;
@@ -48,9 +49,9 @@ export function Dialog({ open, onClose, title, children, width = "max-w-lg", foo
             <h2 id={titleId} className="text-title font-semibold">
               {title}
             </h2>
-            <button type="button" className="btn btn-ghost btn-icon" aria-label="Tutup" onClick={onClose}>
+            <Button type="button" variant="ghost" size="icon" aria-label="Tutup" onClick={onClose}>
               <XIcon size={18} aria-hidden />
-            </button>
+            </Button>
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
           {footer && <footer className="flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3">{footer}</footer>}

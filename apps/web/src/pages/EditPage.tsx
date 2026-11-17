@@ -8,6 +8,7 @@ import { Dialog } from "../components/Dialog";
 import { ModelPickerDialog } from "../components/ModelPicker";
 import { ProfileDialog } from "../components/ProfileDialog";
 import { ThreadHeader } from "../components/ThreadHeader";
+import { WorkspaceInspector } from "../components/WorkspaceInspector";
 import { RequestLogDialog } from "../components/chat/RequestLogDialog";
 import { CompareDialog } from "../components/edit/CompareDialog";
 import { EditComposer, type EditRef } from "../components/edit/EditComposer";
@@ -428,9 +429,9 @@ export function EditPage() {
       </section>
 
       {inspectorOpen && (
-        <aside aria-label="Pengaturan edit" className="workspace-inspector w-[var(--inspector-w)] shrink-0 overflow-y-auto border-l border-line">
+        <WorkspaceInspector label="Pengaturan edit" mode="Edit">
           {inspector}
-        </aside>
+        </WorkspaceInspector>
       )}
 
       <ModelPickerDialog

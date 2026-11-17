@@ -1,65 +1,56 @@
-# EZClaw: Material workspace
+# EZClaw: Navy glass workspace
 
-Updated 2026-11-10 from the owner's brief: Material surfaces, glass accents, smooth lightweight motion, and the existing EZClaw green.
+Updated 2026-11-16 from the owner's brief: a full glassmorphism redesign, informed by shadcn/ui, with the new key color `#1B365D`. Desktop only, compact, and ready to feel at home in a future native desktop window.
 
-Design Read: a desktop-only local AI workbench for conversations, file-based agent work, image generation, and image editing. Material structure with restrained glass, designed for a future native desktop application. ENERGY 2 / RHYTHM 2 / MOTION 2.
+Design Read: a personal desktop AI workbench for Chat, Agent, Image, Edit, Video, and Library. Architectural navy glass, precise controls, and a quiet reading surface. ENERGY 2 / RHYTHM 2 / MOTION 2.
 
-Session override from the owner: desktop only. Mobile responsiveness, touch-specific layouts, navigation drawers, and mobile breakpoint testing are outside scope. This overrides antislop R-03's mobile requirement; desktop keyboard access, contrast, and working controls still apply.
+## Boundaries
 
-Scope correction: visual redesign only. Preserve the original workflow, field availability, control order, validation, and request behavior. Do not add prerequisite steps, hide the edit composer until an image exists, wrap previously visible controls in a new accordion, or introduce new prompt-writing actions.
+Preserve every existing workflow, field, validation, keyboard shortcut, control order, and request. Edit instructions remain visible before selecting a target or model. No new setup steps, hidden fields, suggestion actions, navigation destinations, or fictional activity. Desktop starts at 1024 × 640; the owner's desktop-only instruction overrides mobile requirements.
 
 ## System
 
-| Decision | Choice and reason |
+| Decision | Implementation and purpose |
 | --- | --- |
-| Brand | Sage `#8EA66B` stays on primary actions and selected states to preserve EZClaw's identity. Dark ink on sage preserves readable contrast. |
-| Canvas | `#EAF0E7` surrounds an inset workspace, separating navigation from the task without a heavy divider. |
-| Surfaces | `#F3F6F0` for quiet panels; `#FFFFFF` for the main work surface. Sage-tinted neutrals make the workspace belong to the brand. |
-| Ink | `#20291E` primary and `#4F5D48` secondary provide readable green-toned contrast. |
-| Dark | Neutral graphite (`#141415` canvas, `#1C1C1E` panels, `#232325` work surface), owner's request 2026-11-10: the forest tint read as muddy. Sage stays only on actions and selection, so the brand reads as an accent, not a cast. Light, dark, and system preferences remain available. |
-| Type | Locally bundled Atkinson Hyperlegible Next improves recognition of similar letters in model names; its mono sibling is reserved for code, paths, and parameters. No remote fonts. |
-| Scale | UI 14px, reading 15px/1.6, page titles 20-24px, welcome headlines 22px. Text stays readable while more content fits on screen. |
-| Space | 4px base, 6-8px control gaps, 12-16px section gaps, and 12px welcome padding. Compact grouping replaces large empty margins. |
-| Shape | 4px tags, 6px controls, 10px panels, 14px composer/dialog. Shape communicates role without adding visual bulk. |
-| Desktop density | 30px controls, 208px permanent rail, 264px inspector, 44px header. Desktop pointer controls reserve more room for work. |
-| Content width | Work surfaces and composers use available width up to 1120px; prose stays at 78ch. Settings and Library use a 1280px container with 24px gutters. |
-| Elevation | Composer, popovers, and dialogs get shadows because they sit above content. Static lists and inspector sections stay flat. |
-| Glass | Everything that floats over the work is glass: thread header and composer (the conversation scrolls under them), dialogs and menus. Owner kept this over antislop R-10's 1-2 element cap (2026-11-10). Rail, inspector, lists, and cards stay solid so long text keeps a calm ground. Opaque fallbacks without backdrop-filter. |
-| Icons | Existing Phosphor glyphs describe actual actions: conversation, folder, image, brush, search. Filled glyphs indicate selection. No new logo or generated assets. |
-| Motion | Material emphasized easing, 180ms state changes, 300ms panels and dialogs: long enough to be seen. Section changes rise in, new messages and threads rise once, the composer lifts while focused, dialogs scale in over a blurred scrim, controls show a Material state layer on hover and press, theme switches fade. Reduced motion removes movement. No animation package and no loops. |
+| Brand | `#1B365D`, a deep navy, is the exact primary action color in both themes. White text makes primary actions readable. Selection uses a pale navy tint in light mode and a muted blue panel in dark mode. |
+| Light palette | Slate canvas `#E4EBF4`, white reading surface `#F8FAFD`, ink `#17243A`, secondary ink `#4C5D75`, border `#CDD7E5`. The cool canvas makes translucent white surfaces visible. |
+| Dark palette | Canvas `#0B1220`, surface `#111C2D`, raised `#162337`, ink `#EEF3FB`, secondary ink `#B4C2D7`. Navy has depth without a saturated blue cast across the text. |
+| shadcn foundation | Semantic background/foreground, card, popover, primary, secondary, muted, accent, border, input, ring, and sidebar tokens. Source-owned Button variants use CVA with merged utility classes. Outline, ghost, default, and destructive states follow the shadcn component vocabulary. Existing native dialog, select, checkbox, and keyboard behaviors remain intact. |
+| Glass | Frosted navigation and inset workspace establish two sibling panes. A translucent thread header and composer sit over scrolling content; dialogs and menus are glass when open. The owner explicitly requests glassmorphism, overriding the antislop 1–2 surface cap. Inspector sections and text cards use calm fills without additional backdrop filters. No stacked full-screen blur or animated blur. |
+| Backdrop | One static, low contrast diagonal wash derived only from navy separates the two panes and reveals their transparency. No orbs, particle effects, grids, or background animation. |
+| Edges | Fine cool borders, a one-pixel inner highlight on glass, and small shadows only on elevated surfaces. They distinguish the layers without glowing UI. |
+| Type | Existing locally bundled Atkinson Hyperlegible Next gives model names, instructions, and long answers clear letterforms. Its mono sibling stays on code, paths, and shortcut hints. UI 13–14px, reading 15px/1.6, headings 20–24px. |
+| Density | Permanent 208px rail, 264px inspector, 44px thread header, 30px controls. 4px base spacing; 6–8px within controls and 12–16px between groups. No large empty hero. |
+| Shape | 5px small states, 7px controls, 12px panels, 16px floating surfaces. Full radius only for switches and genuine round markers. |
+| Layout | Left-aligned work, full-width composer up to 1120px, prose at 78ch. Inspector is a distinct inset utility panel; Settings uses a fixed local navigation column alongside its content. All settings destinations remain the same. |
+| Iconography | Existing Phosphor family retained. Chat bubble, terminal, image, brush, video, and library glyphs describe real modes; no invented logo or generated assets. |
+| Motion | CSS transitions for feedback (140ms), popovers (180ms), dialogs and inspector (220ms), strong ease-out `cubic-bezier(.23,1,.32,1)`. Route changes fade 140ms with at most 4px travel; rapid changes cancel the previous animation. No composer movement while typing, no entrance on every thread or message, no moving navigation icons, no animated dimensions for decoration. Search is instant. Reduced motion skips movement. |
 
 ## Composition
 
-The work is the focal point. Navigation and compact welcome text stay left aligned. Chat, Agent, Image, and Edit use the wider work area with small gutters. Edit displays the image stage and complete composer together from the first render, including before choosing a model or image. The upload stage is a compact horizontal row, preserving the original controls and keyboard order.
-
 ```text
-+-------------------+----------------------------------+----------------+
-| EZClaw            | Thread title       Thread actions|                |
-| Search            +----------------------------------+ Model          |
-|                   |                                  | Harness        |
-| Chat / Agent      | Conversation / task / image stage | System prompt  |
-| Image / Edit      |                                  | Parameters     |
-| Library           |                                  |                |
-| New thread        |                                  |                |
-| Actual history    |       Floating composer          |                |
-| Settings + theme  +----------------------------------+----------------+
-+-------------------+
++------------------+--------------------------------------+----------------+
+| EZClaw           | Mode / Thread                  Actions|                |
+| Search      Ctrl K+--------------------------------------+ Model          |
+| Chat             |                                      | Harness        |
+| Agent            | Actual conversation / image / video  | Parameters     |
+| Image / Edit     |                                      |                |
+| Video / Library  |                                      |                |
+| New + history    |                                      |                |
+| Settings + theme |          Frosted composer            |                |
++------------------+--------------------------------------+----------------+
+
+Settings: heading + narrow local navigation | settings sections
+Library: heading + compact filter strip    | actual image collection
+Edit: target stage + visible full composer | original editing controls
 ```
 
-The desktop shell has a permanent rail and an inline inspector controlled by the owner. It never switches to mobile navigation or a modal inspector. The intended minimum window is 1024 by 640 CSS pixels. Thread actions use named icon buttons so long titles retain space. Native packaging is future work; this change remains in the existing React frontend.
-
-## Identity and purpose
-
-- The sage rail, inset work surface, and generous composer form the repeating EZClaw workspace motif.
-- Thread nodes communicate real completed, running, pending approval, and failed states. Ember means an approval or question needs the owner; red means error or destruction.
-- All original editing controls stay in their original sequence: references, preservation options, instruction field, existing compiled-prompt details, model/output controls, and submit. The instruction draft can be written before selecting an image, and remains while a model or target is selected.
-- Empty screens explain the next action. Loading names the resource. Errors preserve retry and recovery behavior.
-- No invented usage metrics, customer claims, activity, imagery, or navigation destinations.
+The repeated motif is a navy action framed by a fine glass edge. Work stays the focal point. Empty states explain the next action and do not create new ones. Real running/waiting/error states keep their existing semantics. The new Video mode receives the same component treatment as the other four modes.
 
 ## Plan review
 
-Rejected stat-card dashboards and green glow backgrounds because the app's job is making and reviewing model outputs. Kept the real four-mode structure, original font, icon family, and sage value; changed surface hierarchy, spacing, composition, controls, and state transitions to meet the new brief.
+The generic landing-page layout suggested by the UI/UX database is unsuitable for an existing workbench. Keep the actual product structure and its controls. The owner's exact navy replaces suggested blue CTA colors; existing local type replaces remote Inter. Use shadcn's semantic component structure and fine control treatment, then give the two-pane desktop shell the glass character requested here. Density stays compact from the prior brief.
 
 ## Verification
 
-See `docs/REDESIGN-VERIFICATION.md` for checks, browser click-through, and the antislop delivery gate. Field Core Web Vitals are not measured by this redesign.
+See `docs/NAVY-GLASS-VERIFICATION.md` for build, desktop layouts, original-control checks, browser interactions, contrast and the delivery gate. No measured Core Web Vitals or runtime frame-rate claim is made.

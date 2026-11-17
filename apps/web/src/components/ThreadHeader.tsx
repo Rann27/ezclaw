@@ -1,9 +1,12 @@
 import type { ThreadDetailDto } from "@ezclaw/core";
 import { PencilSimpleIcon, PushPinIcon, PushPinSlashIcon, SlidersHorizontalIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { keys } from "../lib/queries";
+import { Button } from "./ui/button";
+import { MODE_INFO } from "../modes";
 
 /** Title, pin, rename and delete for a thread, with room for mode-specific controls. */
 export function ThreadHeader({
@@ -28,6 +31,9 @@ export function ThreadHeader({
   children?: ReactNode;
 }) {
   const qc = useQueryClient();
+  const section = useRouterState({ select: (s) => s.location.pathname.split("/")[1] ?? "" });
+  const info = Object.hasOwn(MODE_INFO, section) ? MODE_INFO[section as keyof typeof MODE_INFO] : null;
+  const ModeIcon = info?.icon;
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +64,13 @@ export function ThreadHeader({
 
   return (
     <header className="thread-header">
+      {info && ModeIcon && (
+        <span className="thread-location" aria-hidden>
+          <ModeIcon size={16} />
+          <span>{info.label}</span>
+          <span className="thread-location-separator">/</span>
+        </span>
+      )}
       {renaming ? (
         <form
           className="flex min-w-0 flex-1 items-center gap-2"
@@ -105,10 +118,10 @@ export function ThreadHeader({
       )}
       {children}
       {showInspectorToggle && (
-        <button type="button" className="btn btn-secondary" aria-expanded={inspectorOpen} onClick={onToggleInspector}>
+        <Button type="button" variant="outline" className="inspector-toggle" aria-expanded={inspectorOpen} onClick={onToggleInspector}>
           <SlidersHorizontalIcon size={16} aria-hidden />
           Pengaturan
-        </button>
+        </Button>
       )}
       {error && (
         <p className="basis-full rounded-sm bg-danger-soft px-3 py-2 text-dense text-danger-text" role="alert">
